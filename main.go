@@ -79,7 +79,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		filename = "main.go"
 		run = "go run main.go > $TORK_OUTPUT"
 	case "bash":
-		image = "alpine:3.18.3"
+		image = "ubuntu:mantic"
 		filename = "script"
 		run = "sh ./script > $TORK_OUTPUT"
 	default:
