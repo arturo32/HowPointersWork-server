@@ -85,6 +85,10 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "alpine:3.18.3"
 		filename = "script"
 		run = "sh ./script > $TORK_OUTPUT"
+	case "c":
+		image = "gcc:latest"
+		filename = "main.c"
+		run = "gcc main.c -o main;./main > $TORK_OUTPUT"
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
