@@ -89,6 +89,10 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "gcc:latest"
 		filename = "main.c"
 		run = "gcc main.c -o main;./main > $TORK_OUTPUT"
+	case "gdb":
+		image = "gcc-compiler:latest"
+		filename = "main.c"
+		run = "gcc main.c -o main;./main > $TORK_OUTPUT"
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
@@ -97,7 +101,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		Name:    "execute code",
 		Image:   image,
 		Run:     run,
-		Timeout: "5s",
+		Timeout: "20s",
 		Limits: &input.Limits{
 			CPUs:   "1",
 			Memory: "20m",

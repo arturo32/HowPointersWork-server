@@ -15,6 +15,13 @@ You'll need:
 - [Go](https://golang.org/) version 1.19 or better installed.
 - Docker 
 
+Build the gcc compiler image:
+
+```bash
+docker build -t gcc-compiler .
+```
+
+
 Start the server:
 
 ```bash
