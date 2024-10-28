@@ -18,7 +18,7 @@ You'll need:
 Build the gcc compiler image:
 
 ```bash
-docker build -t gcc-compiler .
+`docker build -t gcc-compiler .`
 ```
 
 

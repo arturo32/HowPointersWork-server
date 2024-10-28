@@ -69,6 +69,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	var image string
 	var run string
 	var filename string
+	var gdbCommands string
 
 	switch strings.TrimSpace(er.Language) {
 	case "":
@@ -92,7 +93,8 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	case "gdb":
 		image = "gcc-compiler:latest"
 		filename = "main.c"
-		run = "gcc main.c -o main;./main > $TORK_OUTPUT"
+		gdbCommands = "d.gdb"
+		run = "gcc main.c -o main;gdb --batch --command=d.gdb --args ./main > $TORK_OUTPUT"
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
@@ -107,7 +109,8 @@ func buildTask(er ExecRequest) (input.Task, error) {
 			Memory: "20m",
 		},
 		Files: map[string]string{
-			filename: er.Code,
+			filename:    er.Code,
+			gdbCommands: "set disable-randomization off\nset auto-solib-add off\nstart\nwhile 1\n    bt full\n    step\nend\n",
 		},
 	}, nil
 }
