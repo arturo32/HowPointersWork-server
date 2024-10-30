@@ -94,7 +94,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "gcc-compiler:latest"
 		filename = "main.c"
 		gdbCommands = "d.gdb"
-		run = "gcc main.c -o main;gdb --batch --command=d.gdb --args ./main > $TORK_OUTPUT"
+		run = "gcc -ggdb -O0 main.c -o main;gdb --batch --command=d.gdb --args ./main > $TORK_OUTPUT"
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
@@ -110,7 +110,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		},
 		Files: map[string]string{
 			filename:    er.Code,
-			gdbCommands: "set disable-randomization off\nset auto-solib-add off\nstart\nwhile 1\n    bt full\n    step\nend\n",
+			gdbCommands: "set disable-randomization off\nset auto-solib-add off\nstart\nn\nbt full\n",
 		},
 	}, nil
 }
