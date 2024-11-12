@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import sys
 
 from urllib.parse import parse_qs
 from subprocess import Popen, PIPE
@@ -31,15 +32,14 @@ def get_request_param(key, request_info):
     return request_info[key][0]
 
 
-def setup_options(env):
-    request_info = parse_request(env)
+def setup_options():
     opts = {
         'VALGRIND_MSG_RE': re.compile('==\d+== (.*)$'),
-        'PROGRAM_DIR': mkdtemp(prefix='/var/spp/programs/'),
-        'LIB_DIR': '/var/spp/lib',
-        'USER_PROGRAM': preprocess_code(get_request_param('code', request_info)),
-        'LANG': get_request_param('lang', request_info),
-        'INCLUDE': '-I/var/spp/include',
+        'PROGRAM_DIR': mkdtemp(prefix='/tmp/programs'),
+        'LIB_DIR': '/tmp/parser', #/var/spp/lib
+        'USER_PROGRAM': 'usercode.c',
+        'LANG': sys.argv[1],
+        'INCLUDE': '-I/var/spp/include', # TODO: update this
         'PRETTY_DUMP': False
     }
     if opts['LANG'] == 'c':
@@ -186,12 +186,16 @@ def cleanup(opts):
     shutil.rmtree(opts['PROGRAM_DIR'])
 
 
-def application(env, start_response):
-    opts = setup_options(env)
+def application():
+    opts = setup_options()
     prep_dir(opts)
     (gcc_retcode, gcc_stdout, gcc_stderr) = compile_c(opts)
     (stderr, stdout) = generate_trace(opts, gcc_stderr) if gcc_retcode == 0 else handle_gcc_error(opts, gcc_stderr)
     cleanup(opts)
-    start_response('200 OK', [('Content-type', 'application/json')])
     # TODO: Figure out how to handle stderr
     return [stdout]
+
+
+
+if __name__ == "__main__":
+    application()
