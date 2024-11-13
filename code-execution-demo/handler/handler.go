@@ -97,8 +97,9 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		//
 		run = "mv usercode.c /tmp/user_code/usercode.c; " +
 			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; " +
-			"python3 /tmp/parser/wsgi_backend.py c; " +
-			"cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+			"python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
+		//"cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
@@ -110,7 +111,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		Timeout: "20s",
 		Limits: &input.Limits{
 			CPUs:   "1",
-			Memory: "20m",
+			Memory: "2000m",
 		},
 		Files: map[string]string{
 			filename:    er.Code,

@@ -110,7 +110,8 @@ def run_valgrind(opts):
     )
     (valgrind_stdout, valgrind_stderr) = valgrind_p.communicate()
     valgrind_retcode = valgrind_p.returncode
-    valgrind_out = '\n'.join(['=== Valgrind stdout ===', str(valgrind_stdout), '=== Valgrind stderr ===', str(valgrind_stderr)])
+    valgrind_out = '\n'.join(['=== Valgrind stdout ===', valgrind_stdout.decode(), '=== Valgrind stderr ===', valgrind_stderr.decode()])
+    # print(valgrind_out)
     end_of_trace_error_msg = check_for_valgrind_errors(opts, str(valgrind_stderr)) if valgrind_retcode != 0 else None
     return valgrind_out, end_of_trace_error_msg
 
@@ -123,7 +124,7 @@ def get_opt_trace_from_vg_trace(opts, end_of_trace_error_msg):
     args.append(opts['F_PATH'])
     postprocess_p = Popen(args, stdout=PIPE, stderr=PIPE)
     (postprocess_stdout, postprocess_stderr) = postprocess_p.communicate()
-    postprocess_stderr = '\n'.join(['=== postprocess stderr ===', str(postprocess_stderr), '==='])
+    postprocess_stderr = '\n'.join(['=== postprocess stderr ===', postprocess_stderr.decode(), '==='])
     return postprocess_stdout, postprocess_stderr
 
 
@@ -197,6 +198,9 @@ def application():
     # if gcc_retcode == 0 else handle_gcc_error(opts, gcc_stderr)
     # cleanup(opts)
     # TODO: Figure out how to handle stderr
+    print(stdout.decode())
+    # print('-------------')
+    # print(stderr)
     return [stdout]
 
 
