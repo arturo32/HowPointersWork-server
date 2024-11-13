@@ -6362,7 +6362,7 @@ void pg_trace_inst(Addr a)
       Word n = VG_(sizeXA)( gbs );
 
       index_of_possible_static_var = (GlobalBlock**)VG_(malloc)("index_of_possible_static_var", n * sizeof(*index_of_possible_static_var));
-      static_var_in_frame = (Bool**)VG_(malloc)("static_var_in_frame", n * sizeof(*static_var_in_frame));
+      static_var_in_frame = (Bool*)VG_(malloc)("static_var_in_frame", n * sizeof(*static_var_in_frame));
       VG_(fprintf)(trace_fp, "\n\"globals\": {");
       for (i = 0; i < n; i++) {
         index_of_possible_static_var[i] = NULL;
@@ -6370,6 +6370,7 @@ void pg_trace_inst(Addr a)
         GlobalBlock* gb = VG_(indexXA)( gbs, i );
         tl_assert(gb->szB > 0);
 
+        // Could be is_mem_defined (return MC_ReadResult) instead of is_mem_defined_func (return int)?
         Bool res = VG_(pg_traverse_global_var)(gb->fullname, gb->addr, is_mem_defined, pg_encoded_addrs, !first_elt, trace_fp);
         if (!res) {
           // pgbovine: res != True for static vars defined inside of functions
@@ -6523,7 +6524,7 @@ void pg_trace_inst(Addr a)
                 VG_(fprintf)(trace_fp, ",");
               }
               // must match exact wording in VG_(pg_traverse_local_var)
-              VG_(fprintf)(trace_fp, "\"%s (static %p)\"", gb->fullname, gb->addr);
+              VG_(fprintf)(trace_fp, "\"%s (static %lu)\"", gb->fullname, gb->addr);
             }
           }
         }

@@ -3787,7 +3787,7 @@ static Bool is_mem_addressable ( Addr a, SizeT len,
 }
 
 // pgbovine - made non-static
-MC_ReadResult is_mem_defined ( Addr a, SizeT len,
+int is_mem_defined ( Addr a, SizeT len,
                                       /*OUT*/Addr* bad_addr,
                                       /*OUT*/UInt* otag )
 {

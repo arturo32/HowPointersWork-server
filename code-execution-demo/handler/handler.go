@@ -92,9 +92,13 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		run = "gcc main.c -o main;./main > $TORK_OUTPUT"
 	case "gdb":
 		image = "gcc-compiler:latest"
-		filename = "main.c"
+		filename = "usercode.c"
 		gdbCommands = "d.gdb"
-		run = "gcc -ggdb -O0 main.c -o main;gdb --batch --command=d.gdb --args ./main > $TORK_OUTPUT"
+		//
+		run = "mv usercode.c /tmp/user_code/usercode.c; " +
+			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; " +
+			"python3 /tmp/parser/wsgi_backend.py c; " +
+			"cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}

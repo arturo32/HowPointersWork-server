@@ -1,15 +1,24 @@
-# Start from the Alpine base image
+# Alpine dosen't have glibc
 #FROM alpine:3.20.3
+
+# Is there a more light OS?
+# gcc 4.8.4
 FROM ubuntu:14.04.1
 
-COPY ./parser /tmp/parser
+# Too new gcc verison?
+# gcc (Debian 14.2.0-8) 14.2.0
+#FROM debian:trixie-20241111-slim
+
+# gcc (Debian 8.3.0-6) 8.3.0
+#FROM debian:buster-20231009
+
 
 RUN apt-get update
 
 # Install gcc, g++, valgrind, and gdb
-#valgrind needs libc6-dbg and bash (not sh/ash from alpine)
-#autotools-dev containes aclocal, required by autogen.sh inside valgrind
-#automake is required by autogen.sh
+# valgrind needs libc6-dbg and bash (not sh/ash from alpine)
+# autotools-dev containes aclocal, required by autogen.sh inside valgrind
+# automake is required by autogen.sh
 RUN apt-get install -y \
     gcc \
     g++ \
@@ -20,24 +29,23 @@ RUN apt-get install -y \
     automake \
     bash
 
-#    valgrind \
+RUN gcc --version
 
-#    gdb \
-#
+COPY ./parser/valgrind-3.11.0 /tmp/parser/valgrind-3.11.0
+
+# Builds custom version of valgrind (by Philip Guo)
 RUN cd /tmp/parser/valgrind-3.11.0 \
-    make clean && ./autogen.sh && make && make install
+    make clean && ./autogen.sh && ./configure --prefix=`pwd`/inst && make && make install
 
-#RUN mkdir gdb-build; \
-#    cd gdb-build; \
-#    wget http://ftp.gnu.org/gnu/gdb/gdb-10.2.tar.xz; \
-#    tar -xvf gdb-10.2.tar.xz; \
-#    cd gdb-10.2; \
-#    ./configure; \
-#    make; \
-#    sudo make install;
+COPY ./parser/vg_to_opt_trace.py /tmp/parser
+COPY ./parser/wsgi_backend.py /tmp/parser
+
+RUN mkdir "/tmp/user_code"
 
 # Set the working directory
-WORKDIR /tmp
+WORKDIR /tmp/user_code
 
 # Default command
 CMD ["/bin/sh"]
+
+# TODO: remove the build files after to reduce image size
