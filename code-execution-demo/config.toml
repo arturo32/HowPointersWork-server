@@ -5,3 +5,11 @@ endpoints.tasks = false
 endpoints.nodes = false
 endpoints.queues = false
 endpoints.metrics = false
+
+# cors middleware
+[middleware.web.cors]
+enabled = true
+origins = "*" # TODO: RESTRICT ORIGINS
+methods = "POST"
+credentials = false
+headers = "*"
