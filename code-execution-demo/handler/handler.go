@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -59,7 +60,11 @@ func Handler(c web.Context) error {
 
 	select {
 	case r := <-result:
-		return c.JSON(http.StatusOK, map[string]string{"output": r})
+		var jsonData map[string]interface{}
+		if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"message": "Error parsing JSON: " + err.Error()})
+		}
+		return c.JSON(http.StatusOK, jsonData)
 	case <-c.Done():
 		return c.JSON(http.StatusGatewayTimeout, map[string]string{"message": "timeout"})
 	}

@@ -1,4 +1,4 @@
-# Alpine dosen't have glibc
+# Alpine doesn't have glibc
 #FROM alpine:3.20.3
 
 # Is there a more light OS?

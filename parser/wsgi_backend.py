@@ -198,12 +198,11 @@ def application():
     # if gcc_retcode == 0 else handle_gcc_error(opts, gcc_stderr)
     # cleanup(opts)
     # TODO: Figure out how to handle stderr
-    print(stdout.decode())
     # print('-------------')
     # print(stderr)
-    return [stdout]
+    return stdout.decode()
 
 
 
 if __name__ == "__main__":
-    application()
+    print(application())
