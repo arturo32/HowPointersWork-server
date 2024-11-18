@@ -129,9 +129,8 @@ def process_json_obj(obj, err_str, stdout_str):
     ret['stdout'] = stdout_str
 
     if 'globals' in obj:
-        if hasattr(obj['globals'], 'iteritems'):
-            for g_var, g_val in obj['globals'].iteritems():
-                enc_globals[g_var] = encode_value(g_val, heap)
+        for g_var, g_val in obj['globals'].items():
+            enc_globals[g_var] = encode_value(g_val, heap)
 
     for e in obj['stack']:
         stack_obj = {}
@@ -158,9 +157,8 @@ def process_json_obj(obj, err_str, stdout_str):
         enc_locals = {}
         stack_obj['encoded_locals'] = enc_locals
 
-        if hasattr(e['locals'], 'iteritems'):
-            for local_var, local_val in e['locals'].iteritems():
-                enc_locals[local_var] = encode_value(local_val, heap)
+        for local_var, local_val in e['locals'].items():
+            enc_locals[local_var] = encode_value(local_val, heap)
 
     return ret
 
