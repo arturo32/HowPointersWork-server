@@ -1,1 +1,12 @@
+# General
 .idea/
+
+# Binaries for programs and plugins
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Go workspace file
+go.work

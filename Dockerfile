@@ -5,7 +5,7 @@
 # gcc 4.8.4
 FROM ubuntu:14.04.1
 
-# Too new gcc verison?
+# Too new gcc version?
 # gcc (Debian 14.2.0-8) 14.2.0
 #FROM debian:trixie-20241111-slim
 

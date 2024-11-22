@@ -18,6 +18,8 @@ type ExecRequest struct {
 	Language string `json:"language"`
 }
 
+var debug_valgrind = false
+
 func Handler(c web.Context) error {
 	er := ExecRequest{}
 
@@ -60,11 +62,16 @@ func Handler(c web.Context) error {
 
 	select {
 	case r := <-result:
-		var jsonData map[string]interface{}
-		if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"message": "Error parsing JSON: " + err.Error()})
+		if debug_valgrind {
+			return c.JSON(http.StatusOK, r)
+		} else {
+			var jsonData map[string]interface{}
+			if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{"message": "Error parsing JSON: " + err.Error()})
+			}
+			return c.JSON(http.StatusOK, jsonData)
 		}
-		return c.JSON(http.StatusOK, jsonData)
+
 	case <-c.Done():
 		return c.JSON(http.StatusGatewayTimeout, map[string]string{"message": "timeout"})
 	}
@@ -101,9 +108,15 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		gdbCommands = "d.gdb"
 		//
 		run = "mv usercode.c /tmp/user_code/usercode.c; " +
-			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; " +
-			"python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
-		//"cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; "
+
+		if debug_valgrind {
+			run += "python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
+		} else {
+			run += "python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
+		}
+
+		//
 
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)

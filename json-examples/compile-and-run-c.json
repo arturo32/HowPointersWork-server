@@ -1,4 +1,0 @@
-{
-	"language":"c",
-	"code":"#include<stdio.h> \n int main(){printf(\"oi!\");return 0;}"
-}

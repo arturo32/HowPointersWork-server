@@ -7,9 +7,10 @@ endpoints.queues = false
 endpoints.metrics = false
 
 # cors middleware
+# TODO: RESTRICT ORIGINS
 [middleware.web.cors]
 enabled = true
-origins = "*" # TODO: RESTRICT ORIGINS
+origins = "*"
 methods = "POST"
 credentials = false
 headers = "*"
