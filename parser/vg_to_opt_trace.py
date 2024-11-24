@@ -77,7 +77,7 @@ def process_record(lines):
         rec = rec.replace('"val":******', '"val":null')
         obj = json.loads(rec)
     except ValueError:
-        print(sys.stderr, "Ugh, bad record!", rec)
+        print("Ugh, bad record!", rec, file=sys.stderr)
         return False
 
     assert len(stdout_lines) == 1 # always have one!
@@ -431,7 +431,7 @@ void *x = foo(); // <-- there is an extraneous step here AFTER foo returns but
 
     for e in final_execution_points:
         if 'to_delete' in e:
-            print(sys.stderr, 'to_delete:', json.dumps(e))
+            print('to_delete:', json.dumps(e), file=sys.stderr)
     final_execution_points = [e for e in final_execution_points if 'to_delete' not in e]
 
 
