@@ -2,20 +2,23 @@ FROM golang:1.23-alpine
 
 WORKDIR /app
 
-COPY . .
+COPY main.go .
+COPY go.mod go.sum .
+COPY ./handler ./handler
+COPY config.toml .
+
+# Downloading Go modules and building it
+RUN go mod download
+RUN go build -o /server main.go
 
 # Downloading docker
 RUN apk update
 RUN apk upgrade
 RUN apk add --no-cache docker-cli
 
-# Building image that tork will use
-# RUN docker build -t gcc-compiler .
-
-# Downloading Go modules and building it
-RUN go mod download
-RUN go build -o /server main.go
-
-#EXPOSE 8000
+EXPOSE 8000
 
 ENTRYPOINT ["/server", "run", "standalone"]
+
+# For debugging
+# CMD ["/bin/sh"]
