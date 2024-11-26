@@ -442,7 +442,8 @@ void *x = foo(); // <-- there is an extraneous step here AFTER foo returns but
         final_execution_points[-1]['exception_msg'] = 'Stopped after running ' + str(MAX_STEPS) + ' steps. Please shorten your code,\nsince Python Tutor is not designed to handle long-running code.'
 
 
-    cod = open(fn).read()
+    cod = open(fn, encoding="utf8").read()
+
     # produce the final trace, voila!
     final_res = {'code': cod, 'trace': final_execution_points}
 
