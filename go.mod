@@ -1,4 +1,4 @@
-module github.com/runabol/code-execution-demo
+module github.com/arturo32/HowPointersWork-server
 
 go 1.21
 

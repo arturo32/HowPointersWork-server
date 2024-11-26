@@ -1,13 +1,35 @@
-## Arbitrary Code Execution Demo
+# How Pointers Work - Server
+
+Inspired by [this article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and [this clone of Python Tutor's custom valgrind](https://github.com/divyanshsinghvi/CTutor). 
 
 
-Have you ever wondered what happens behind the scenes when you hit "Run" on a code snippet in online development environments like [Go Playground](https://go.dev/play/) or [Repl.it](https://replit.com/)?
 
-## Detailed instructions 
+## Running 
 
-[https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi)
+### With docker
 
-## Running the demo
+This project is composed of two images: One that will run the Go program and other that will be run by Tork.
+
+So we need to first build the image that Tork will use (the one that will compile and run the custom valgrind):
+
+```bash
+sudo docker build -f Dockerfile.main -t gcc-compiler .
+```
+
+Then, we build the main image:
+```bash
+sudo docker build -f Dockerfile.main -t hpw-server .
+```
+
+As ["Docker in docker" is unadvised](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/), we run the main container using the `-v` flag that will bind the most internal container image docker socket to the external docker. Ps.: `--network=host/--net=host` don't work on Windows.
+
+```bash
+docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -it hpw-server
+```
+
+### Without docker
+
+
 
 You'll need:
 
@@ -21,10 +43,20 @@ Build the gcc compiler image:
 ```
 
 
+Start the server with docker:
+
+First, build the image:
+```bash
+sudo docker build -f Dockerfile.main -t hpw-server .
+```
+
+
+
+
 Start the server:
 
 ```bash
-go run main.go run standalone
+`go run main.go run standalone`
 ```
 
 Execute a code snippet. Example
