@@ -33,6 +33,9 @@ RUN gcc --version
 
 COPY ./parser/valgrind-3.11.0 /tmp/parser/valgrind-3.11.0
 
+# The line below was not necessary until I tried to build this image inside a Ubuntu with WSL
+RUN chmod +x /tmp/parser/valgrind-3.11.0/autogen.sh
+
 # Builds custom version of valgrind (by Philip Guo)
 RUN cd /tmp/parser/valgrind-3.11.0 \
     make clean && ./autogen.sh && ./configure --prefix=`pwd`/inst && make && make install

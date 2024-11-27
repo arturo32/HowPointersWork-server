@@ -13,7 +13,7 @@ This project is composed of two images: One that will run the Go program and oth
 So we need to first build the image that Tork will use (the one that will compile and run the custom valgrind):
 
 ```bash
-sudo docker build -f Dockerfile.main -t gcc-compiler .
+sudo docker build -f Dockerfile -t gcc-compiler .
 ```
 
 Then, we build the main image:
