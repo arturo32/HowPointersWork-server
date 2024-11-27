@@ -1,6 +1,6 @@
 # How Pointers Work - Server
 
-Inspired by [this article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and [this clone of Python Tutor's custom valgrind](https://github.com/divyanshsinghvi/CTutor). 
+Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and this [clone of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor). 
 
 
 
