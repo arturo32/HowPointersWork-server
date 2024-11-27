@@ -119,7 +119,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		Timeout: "20s",
 		Limits: &input.Limits{
 			CPUs:   "1",
-			Memory: "2000m",
+			Memory: "1000m",
 		},
 		Files: map[string]string{
 			filename: er.Code,
