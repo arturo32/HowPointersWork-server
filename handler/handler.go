@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -86,35 +85,36 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	var image string
 	var run string
 	var filename string
+	var compiler string
+	var language string
+
+	image = "gcc-compiler:latest"
 
 	switch strings.TrimSpace(er.Language) {
 	case "":
 		return input.Task{}, errors.Errorf("require: language")
 	case "c++":
-		image = "gcc-compiler:latest"
+		compiler = "g++"
 		filename = "usercode.cpp"
-		run = "mv usercode.cpp /tmp/user_code/usercode.cpp; " +
-			"g++ -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.cpp; "
+		language = "c++"
 
-		if debug_valgrind {
-			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
-		} else {
-			run += "python3 /tmp/parser/wsgi_backend.py c++ > $TORK_OUTPUT"
-		}
 	case "c":
-		image = "gcc-compiler:latest"
+		compiler = "gcc"
 		filename = "usercode.c"
-		run = "mv usercode.c /tmp/user_code/usercode.c; " +
-			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c 2> $TORK_OUTPUT; [ -s \"${TORK_OUTPUT}\" ] || "
-
-		if debug_valgrind {
-			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
-		} else {
-			run += "python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
-		}
+		language = "c"
 
 	default:
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
+	}
+
+	run = "mv " + filename + " /tmp/user_code/" + filename + "; " +
+		compiler + " -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/" + filename + " 2> $TORK_OUTPUT; " +
+		"[ -s \"${TORK_OUTPUT}\" ] || "
+
+	if debug_valgrind {
+		run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+	} else {
+		run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
 	}
 
 	return input.Task{
@@ -154,7 +154,7 @@ type Ret struct {
 
 func handleGccError(code string, gccStderr string) string {
 	// Define the regex pattern with the filename "usercode.c"
-	pattern := `usercode.c:(\d+):(\d+):.+?(error:.*)`
+	pattern := `usercode(.c|.cpp):(\d+):(\d+):.+?(error:.*)`
 
 	// Compile the regular expression
 	re := regexp.MustCompile(pattern)
@@ -174,7 +174,7 @@ func handleGccError(code string, gccStderr string) string {
 	lines := strings.Split(gccStderr, "\n")
 	for _, line := range lines {
 		// Try to match the error format
-		re := regexp.MustCompile(fmt.Sprintf(`%s:(\d+):(\d+):.+?(error:.*$)`, "usercode.c"))
+		re := regexp.MustCompile(`usercode(.c|.cpp):(\d+):(\d+):.+?(error:.*$)`)
 		matches := re.FindStringSubmatch(line)
 		if matches != nil {
 			// Extract the line and column number and the error message
@@ -196,7 +196,7 @@ func handleGccError(code string, gccStderr string) string {
 			parts := strings.Split(line, ":")
 			exceptionMsg = strings.TrimSpace(parts[len(parts)-1])
 			// Match file path and line number
-			if strings.Contains(parts[0], "usercode.c") {
+			if strings.Contains(parts[0], "usercode.c") || strings.Contains(parts[0], "usercode.cpp") {
 				lineno = toInt(parts[1])
 			}
 			break
