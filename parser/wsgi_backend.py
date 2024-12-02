@@ -35,10 +35,10 @@ def setup_options():
     opts = {
         'VALGRIND_MSG_RE': re.compile('==\d+== (.*)$'),
         'PROGRAM_DIR': '/tmp/user_code',
-        'LIB_DIR': '/tmp/parser', #/var/spp/lib
+        'LIB_DIR': '/tmp/parser',  # /var/spp/lib
         'USER_PROGRAM': 'usercode.c',
         'LANG': sys.argv[1],
-        'INCLUDE': '-I/var/spp/include', # TODO: update this
+        'INCLUDE': '-I/var/spp/include',  # TODO: update this
         'PRETTY_DUMP': False
     }
     if opts['LANG'] == 'c':
@@ -65,7 +65,6 @@ def setup_options():
 #         f.write(opts['USER_PROGRAM'])
 
 
-
 # Compile code. What's in gcc_stout, gcc_stderr, p.returncode?
 def compile_c(opts):
     CC, DIALECT, EXE_PATH, F_PATH = pluck(opts, 'CC', 'DIALECT', 'EXE_PATH', 'F_PATH')
@@ -74,8 +73,8 @@ def compile_c(opts):
         stdout=PIPE,
         stderr=PIPE
     )
-    (gcc_stdout, gcc_stderr) = p.communicate() # gcc_stout specfic errors? gcc_stderr compilation errors
-    gcc_retcode = p.returncode # p.returncode is the exit code, normally 0
+    (gcc_stdout, gcc_stderr) = p.communicate()  # gcc_stout specfic errors? gcc_stderr compilation errors
+    gcc_retcode = p.returncode  # p.returncode is the exit code, normally 0
     return gcc_retcode, gcc_stdout, gcc_stderr
 
 
@@ -110,7 +109,8 @@ def run_valgrind(opts):
     )
     (valgrind_stdout, valgrind_stderr) = valgrind_p.communicate()
     valgrind_retcode = valgrind_p.returncode
-    valgrind_out = '\n'.join(['=== Valgrind stdout ===', valgrind_stdout.decode(), '=== Valgrind stderr ===', valgrind_stderr.decode()])
+    valgrind_out = '\n'.join(
+        ['=== Valgrind stdout ===', valgrind_stdout.decode(), '=== Valgrind stderr ===', valgrind_stderr.decode()])
     # print(valgrind_out)
     end_of_trace_error_msg = check_for_valgrind_errors(opts, str(valgrind_stderr)) if valgrind_retcode != 0 else None
     return valgrind_out, end_of_trace_error_msg
@@ -147,7 +147,7 @@ def handle_gcc_error(opts, gcc_stderr):
     # number of the error.
     for line in gcc_stderr.splitlines():
         # can be 'fatal error:' or 'error:' or probably other stuff too.
-        m = re.search(opts['FN'] + ':(\d+):(\d+):.+?(error:.*$)', line)
+        m = re.search(opts['FN'] + ':(\\d+):(\\d+):.+?(error:.*$)', line)
         if m:
             lineno = int(m.group(1))
             column = int(m.group(2))
@@ -174,15 +174,15 @@ def handle_gcc_error(opts, gcc_stderr):
             break
 
     ret = {
-            'code': opts['USER_PROGRAM'],
-            'trace': [
-                {
-                    'event': 'uncaught_exception',
-                    'exception_msg': exception_msg,
-                    'line': lineno
-                }
-            ]
-        }
+        'code': opts['USER_PROGRAM'],
+        'trace': [
+            {
+                'event': 'uncaught_exception',
+                'exception_msg': exception_msg,
+                'line': lineno
+            }
+        ]
+    }
 
     return stderr, json.dumps(ret)
 
@@ -201,7 +201,6 @@ def application():
     # print('-------------')
     # print(stderr)
     return stdout.decode()
-
 
 
 if __name__ == "__main__":

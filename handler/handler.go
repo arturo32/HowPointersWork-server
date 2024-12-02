@@ -2,7 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -62,6 +65,8 @@ func Handler(c web.Context) error {
 
 	select {
 	case r := <-result:
+		r = handleGccError(er.Code, r)
+
 		if debug_valgrind {
 			return c.JSON(http.StatusOK, r)
 		} else {
@@ -100,7 +105,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "gcc-compiler:latest"
 		filename = "usercode.c"
 		run = "mv usercode.c /tmp/user_code/usercode.c; " +
-			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; "
+			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c 2> $TORK_OUTPUT; [ -s \"${TORK_OUTPUT}\" ] || "
 
 		if debug_valgrind {
 			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
@@ -125,4 +130,93 @@ func buildTask(er ExecRequest) (input.Task, error) {
 			filename: er.Code,
 		},
 	}, nil
+}
+
+// Helper function to safely convert string to integer
+func toInt(s string) int {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return val
+}
+
+type Trace struct {
+	Event        string `json:"event"`
+	ExceptionMsg string `json:"exception_msg"`
+	Line         int    `json:"line"`
+}
+
+type Ret struct {
+	Code  string  `json:"code"`
+	Trace []Trace `json:"trace"`
+}
+
+func handleGccError(code string, gccStderr string) string {
+	// Define the regex pattern with the filename "usercode.c"
+	pattern := `usercode.c:(\d+):(\d+):.+?(error:.*)`
+
+	// Compile the regular expression
+	re := regexp.MustCompile(pattern)
+
+	// Check if the regex matches the input string
+	isMatch := re.MatchString(gccStderr)
+
+	if !isMatch {
+		return gccStderr
+	}
+
+	exceptionMsg := "unknown compiler error"
+	lineno := 0
+	//column := 0
+
+	// Split gccStderr into lines and process
+	lines := strings.Split(gccStderr, "\n")
+	for _, line := range lines {
+		// Try to match the error format
+		re := regexp.MustCompile(fmt.Sprintf(`%s:(\d+):(\d+):.+?(error:.*$)`, "usercode.c"))
+		matches := re.FindStringSubmatch(line)
+		if matches != nil {
+			// Extract the line and column number and the error message
+			lineno = toInt(matches[1])
+			//column = toInt(matches[2])
+			exceptionMsg = strings.TrimSpace(matches[3])
+			break
+		}
+
+		// Handle custom-defined errors from include path
+		if strings.Contains(line, "#error") {
+			// Extract the error message after '#error'
+			exceptionMsg = strings.TrimSpace(strings.Split(line, "#error")[1])
+			break
+		}
+
+		// Handle linker errors (undefined reference)
+		if strings.Contains(line, "undefined ") {
+			parts := strings.Split(line, ":")
+			exceptionMsg = strings.TrimSpace(parts[len(parts)-1])
+			// Match file path and line number
+			if strings.Contains(parts[0], "usercode.c") {
+				lineno = toInt(parts[1])
+			}
+			break
+		}
+	}
+
+	// Prepare the return value
+	ret := Ret{
+		Code: code,
+		Trace: []Trace{
+			{
+				Event:        "uncaught_exception",
+				ExceptionMsg: exceptionMsg,
+				Line:         lineno,
+			},
+		},
+	}
+
+	// Convert to JSON
+	retJson, _ := json.Marshal(ret)
+
+	return string(retJson)
 }
