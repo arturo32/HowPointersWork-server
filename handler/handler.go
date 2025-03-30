@@ -67,7 +67,12 @@ func Handler(c web.Context) error {
 		} else {
 			var jsonData map[string]interface{}
 			if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
-				return c.JSON(http.StatusBadRequest, map[string]string{"message": "Error parsing JSON: " + err.Error()})
+				if strings.HasPrefix(r, "/tmp/user_code/usercode.c:") {
+					return c.JSON(http.StatusBadRequest, map[string]string{"message": "compilation_error:" + r})
+				} else {
+					log.Debug().Msgf("unknown_error: %s", err.Error())
+					return c.JSON(http.StatusBadRequest, map[string]string{"message": "unknown_error"})
+				}
 			}
 			return c.JSON(http.StatusOK, jsonData)
 		}
@@ -89,7 +94,16 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "gcc-compiler:latest"
 		filename = "usercode.cpp"
 		run = "mv usercode.cpp /tmp/user_code/usercode.cpp; " +
-			"g++ -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.cpp; "
+
+			// creating file for storing possible compilation errors
+			"touch compilation_error.txt; " +
+
+			// compiling user code (without warnings); sending possible compilation error to compilation_error.txt
+			"g++ -w -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.cpp; 2> compilation_error.txt; " +
+
+			// if compilation_error.txt is not empty, send its output to TORK's output
+			"if [ -s compilation_error.txt ]; then " +
+			"cat compilation_error.txt > $TORK_OUTPUT; else "
 
 		if debug_valgrind {
 			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
@@ -100,12 +114,21 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		image = "gcc-compiler:latest"
 		filename = "usercode.c"
 		run = "mv usercode.c /tmp/user_code/usercode.c; " +
-			"gcc -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c; "
+
+			// creating file for storing possible compilation errors
+			"touch compilation_error.txt; " +
+
+			// compiling user code (without warnings); sending possible compilation error to compilation_error.txt
+			"gcc -w -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/usercode.c 2> compilation_error.txt; " +
+
+			// if compilation_error.txt is not empty, send its output to TORK's output
+			"if [ -s compilation_error.txt ]; then " +
+			"cat compilation_error.txt > $TORK_OUTPUT; else "
 
 		if debug_valgrind {
-			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+			run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT; fi"
 		} else {
-			run += "python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT"
+			run += "python3 /tmp/parser/wsgi_backend.py c > $TORK_OUTPUT; fi"
 		}
 
 	default:

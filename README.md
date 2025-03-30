@@ -66,7 +66,7 @@ curl \
   -s \
   -X POST \
   -H "content-type:application/json" \
-  -d '{"language":"python","code":"print(\"hello world\")"}' \
+  -d '{"language":"c","code":"#include <stdio.h>\n\nint main(){\nint i = 23;\nint *k = &i;\nreturn 0;\n}"}' \
   http://localhost:8000/execute
 ```
 
@@ -76,14 +76,6 @@ Should output:
 hello world
 ```
 
-You can try changing the `language` to `go` or `bash`.
-
-## Frontend 
-
-```shell
-cd frontend
-npm i
-npm run dev
-```
+You can try changing the `language` to `c++`.
 
 
