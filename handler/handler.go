@@ -64,16 +64,33 @@ func Handler(c web.Context) error {
 
 	select {
 	case r := <-result:
-		r = handleGccError(er.Code, r)
-
 		if debug_valgrind {
 			return c.JSON(http.StatusOK, r)
 		} else {
+			// Define the regex pattern with the filename "usercode.c"
+			pattern := `usercode(.c|.cpp):(\d+):(\d+):.+?(error:.*)`
+
+			// Compile the regular expression
+			re := regexp.MustCompile(pattern)
+
+			// Check if the regex matches the input string
+			isMatch := re.MatchString(r)
+
 			var jsonData map[string]interface{}
-			if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
-				return c.JSON(http.StatusBadRequest, map[string]string{"message": "Error parsing JSON: " + err.Error()})
+			if !isMatch {
+				if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
+					log.Debug().Msgf("unknown_json_parsing_error: %s", err.Error())
+					return c.JSON(http.StatusBadRequest, map[string]string{"message": "unknown_error"})
+				}
+				return c.JSON(http.StatusOK, jsonData)
+			} else {
+				err := json.Unmarshal([]byte(handleGccError(er.Code, r)), &jsonData)
+				if err != nil {
+					return err
+				}
+				return c.JSON(http.StatusBadRequest, jsonData)
 			}
-			return c.JSON(http.StatusOK, jsonData)
+
 		}
 
 	case <-c.Done():
@@ -108,7 +125,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	}
 
 	run = "mv " + filename + " /tmp/user_code/" + filename + "; " +
-		compiler + " -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/" + filename + " 2> $TORK_OUTPUT; " +
+		compiler + " -w -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/" + filename + " 2> $TORK_OUTPUT; " +
 		"[ -s \"${TORK_OUTPUT}\" ] || "
 
 	if debug_valgrind {
@@ -141,46 +158,39 @@ func toInt(s string) int {
 	return val
 }
 
-type Trace struct {
+type ErrorMsg struct {
 	Event        string `json:"event"`
 	ExceptionMsg string `json:"exception_msg"`
 	Line         int    `json:"line"`
+	Column       int    `json:"column"`
 }
 
 type Ret struct {
-	Code  string  `json:"code"`
-	Trace []Trace `json:"trace"`
+	Code     string   `json:"code"`
+	ErrorMsg ErrorMsg `json:"error"`
 }
 
 func handleGccError(code string, gccStderr string) string {
-	// Define the regex pattern with the filename "usercode.c"
-	pattern := `usercode(.c|.cpp):(\d+):(\d+):.+?(error:.*)`
-
-	// Compile the regular expression
-	re := regexp.MustCompile(pattern)
-
-	// Check if the regex matches the input string
-	isMatch := re.MatchString(gccStderr)
-
-	if !isMatch {
-		return gccStderr
-	}
 
 	exceptionMsg := "unknown compiler error"
-	lineno := 0
-	//column := 0
+	errorType := "uncaught_exception"
+	lineNumber := 0
+	columnNumber := 0
+
+	println(gccStderr)
 
 	// Split gccStderr into lines and process
 	lines := strings.Split(gccStderr, "\n")
 	for _, line := range lines {
 		// Try to match the error format
-		re := regexp.MustCompile(`usercode(.c|.cpp):(\d+):(\d+):.+?(error:.*$)`)
+		re := regexp.MustCompile(`usercode(.c|.cpp):(?P<Line>\d+):(?P<Column>\d+):.+?(?P<Error>error:.*$)`)
 		matches := re.FindStringSubmatch(line)
 		if matches != nil {
 			// Extract the line and column number and the error message
-			lineno = toInt(matches[1])
-			//column = toInt(matches[2])
-			exceptionMsg = strings.TrimSpace(matches[3])
+			lineNumber = toInt(matches[re.SubexpIndex("Line")])
+			columnNumber = toInt(matches[re.SubexpIndex("Column")])
+			exceptionMsg = strings.TrimSpace(matches[re.SubexpIndex("Error")])
+			errorType = "compiler"
 			break
 		}
 
@@ -197,7 +207,7 @@ func handleGccError(code string, gccStderr string) string {
 			exceptionMsg = strings.TrimSpace(parts[len(parts)-1])
 			// Match file path and line number
 			if strings.Contains(parts[0], "usercode.c") || strings.Contains(parts[0], "usercode.cpp") {
-				lineno = toInt(parts[1])
+				lineNumber = toInt(parts[1])
 			}
 			break
 		}
@@ -206,12 +216,11 @@ func handleGccError(code string, gccStderr string) string {
 	// Prepare the return value
 	ret := Ret{
 		Code: code,
-		Trace: []Trace{
-			{
-				Event:        "uncaught_exception",
-				ExceptionMsg: exceptionMsg,
-				Line:         lineno,
-			},
+		ErrorMsg: ErrorMsg{
+			Event:        errorType,
+			ExceptionMsg: exceptionMsg,
+			Line:         lineNumber,
+			Column:       columnNumber,
 		},
 	}
 
