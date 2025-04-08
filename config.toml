@@ -1,3 +1,6 @@
+[coordinator]
+address = "0.0.0.0:8000"
+
 [coordinator.api]
 endpoints.health = true
 endpoints.jobs = false
@@ -28,5 +31,5 @@ headers = "*"
 ##level = "DEBUG"        # TRACE|DEBUG|INFO|WARN|ERROR
 #skip = ["GET /health"] # supports wildcards (*)
 
-[runtime]
-type = "podman"
+#[runtime]
+#type = "podman"

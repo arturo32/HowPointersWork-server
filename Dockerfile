@@ -3,7 +3,8 @@
 
 # Is there a more light OS?
 # gcc 4.8.4
-FROM ubuntu:14.04.1
+# image 14.04.1 were using manifest Schema v1 (new dockers does not accept it)
+FROM ubuntu:14.04
 
 # Too new gcc version?
 # gcc (Debian 14.2.0-8) 14.2.0

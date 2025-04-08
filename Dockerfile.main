@@ -20,6 +20,7 @@ RUN apk add --no-cache docker-cli
 
 EXPOSE 8000
 
+# ENTRYPOINT ["/server", "migration"]
 ENTRYPOINT ["/server", "run", "standalone"]
 
 # For debugging
