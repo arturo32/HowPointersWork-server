@@ -16,6 +16,8 @@ RUN apk update
 RUN apk upgrade
 RUN apk add --no-cache docker-cli
 
+
+
 EXPOSE 8000
 
 ENTRYPOINT ["/server", "run", "standalone"]

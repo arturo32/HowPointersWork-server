@@ -56,7 +56,7 @@ sudo docker build -f Dockerfile.main -t hpw-server .
 Start the server:
 
 ```bash
-`go run main.go run standalone`
+go run main.go run standalone
 ```
 
 Execute a code snippet. Example
@@ -79,3 +79,9 @@ hello world
 You can try changing the `language` to `c++`.
 
 
+### How to update Tork in the future
+```bash
+go list -m -u github.com/runabol/tork #find last version
+go get github.com/runabol/tork@v0.1.121 #get last version
+go mod tidy #syncronize dependencies
+```

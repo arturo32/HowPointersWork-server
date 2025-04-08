@@ -6,6 +6,9 @@ endpoints.nodes = false
 endpoints.queues = false
 endpoints.metrics = false
 
+#[datastore]
+#type = "inmemory"
+
 # cors middleware
 # TODO: RESTRICT ORIGINS
 [middleware.web.cors]
@@ -14,3 +17,16 @@ origins = "*"
 methods = "POST"
 credentials = false
 headers = "*"
+
+#[logging]
+#level = "info"   # debug | info | warn | error
+#format = "pretty" # pretty | json
+
+# request logging
+#[middleware.web.logger]
+##enabled = true
+##level = "DEBUG"        # TRACE|DEBUG|INFO|WARN|ERROR
+#skip = ["GET /health"] # supports wildcards (*)
+
+[runtime]
+type = "podman"

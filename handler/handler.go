@@ -48,12 +48,12 @@ func Handler(c web.Context) error {
 		}
 	}
 
-	input := &input.Job{
+	inputN := &input.Job{
 		Name:  "code execution",
 		Tasks: []input.Task{task},
 	}
 
-	job, err := engine.SubmitJob(c.Request().Context(), input, listener)
+	job, err := engine.SubmitJob(c.Request().Context(), inputN, listener)
 
 	if err != nil {
 		c.Error(http.StatusBadRequest, errors.Wrapf(err, "error executing code"))
