@@ -18,6 +18,7 @@ import (
 type ExecRequest struct {
 	Code     string `json:"code"`
 	Language string `json:"language"`
+	Input    string `json:"input"`
 }
 
 var debug_valgrind = false
@@ -80,6 +81,7 @@ func Handler(c web.Context) error {
 			if !isMatch {
 				if err := json.Unmarshal([]byte(r), &jsonData); err != nil {
 					log.Debug().Msgf("unknown_json_parsing_error: %s", err.Error())
+					log.Debug().Msg(r)
 					return c.JSON(http.StatusBadRequest, map[string]string{"message": "unknown_error"})
 				}
 				return c.JSON(http.StatusOK, jsonData)
@@ -124,14 +126,23 @@ func buildTask(er ExecRequest) (input.Task, error) {
 		return input.Task{}, errors.Errorf("unknown language: %s", er.Language)
 	}
 
-	run = "mv " + filename + " /tmp/user_code/" + filename + "; " +
-		compiler + " -w -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/" + filename + " 2> $TORK_OUTPUT; " +
-		"[ -s \"${TORK_OUTPUT}\" ] || "
+	run =
+		// Move file
+		"mv " + filename + " /tmp/user_code/" + filename + "; " +
+
+			// Create file with the user input in the same directory of the program source file
+			"echo \"" + er.Input + "\" > /tmp/user_code/programInput.txt; " +
+
+			// Compile user code without warnings (-w). stderr output is passed to TORK_OUTPUT (in case of compiling error)
+			compiler + " -w -ggdb -O0 -fno-omit-frame-pointer -o /tmp/user_code/usercode /tmp/user_code/" + filename + " 2> $TORK_OUTPUT; " +
+
+			// If the TORK_OUTPUT is not empty, i.e., an error happened, do nothing
+			"[ -s \"${TORK_OUTPUT}\" ] || "
 
 	if debug_valgrind {
 		run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
 	} else {
-		run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
+		run += "python3 /tmp/parser/wsgi_backend.py " + language + " " + er.Input + " > $TORK_OUTPUT"
 	}
 
 	return input.Task{

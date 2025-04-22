@@ -24,7 +24,7 @@ sudo docker build -f Dockerfile.main -t hpw-server .
 As ["Docker in docker" is unadvised](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/), we run the main container using the `-v` flag that will bind the most internal container image docker socket to the external docker. Ps.: `--network=host/--net=host` don't work on Windows.
 
 ```bash
-docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -it hpw-server
+sudo docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -it hpw-server
 ```
 
 ### Without docker

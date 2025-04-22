@@ -37,7 +37,9 @@ def setup_options():
         'PROGRAM_DIR': '/tmp/user_code',
         'LIB_DIR': '/tmp/parser',  # /var/spp/lib
         'USER_PROGRAM': 'usercode.c',
+        'USER_PROGRAM_INPUT' : 'programInput.txt',
         'LANG': sys.argv[1],
+        'INPUT': sys.argv[2],
         'INCLUDE': '-I/var/spp/include',  # TODO: update this
         'PRETTY_DUMP': False
     }
@@ -51,8 +53,9 @@ def setup_options():
         opts['FN'] = 'usercode.cpp'
     opts.update({
         'F_PATH': os.path.join(opts['PROGRAM_DIR'], opts['FN']),
-        'VGTRACE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode.vgtrace'),
-        'EXE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode')
+        'I_PATH': os.path.join(opts['PROGRAM_DIR'], opts['USER_PROGRAM_INPUT']),
+        'VGTRACE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode. '),
+        'EXE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode'),
     })
     return opts
 
@@ -102,7 +105,7 @@ def run_valgrind(opts):
          '--tool=memcheck',
          '--source-filename=' + opts['FN'],
          '--trace-filename=' + opts['VGTRACE_PATH'],
-         opts['EXE_PATH']
+         opts['EXE_PATH'] + ' < ' + opts['I_PATH'],
          ],
         stdout=PIPE,
         stderr=PIPE
