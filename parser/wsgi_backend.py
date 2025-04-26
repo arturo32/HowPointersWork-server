@@ -37,6 +37,7 @@ def setup_options():
         'PROGRAM_DIR': '/tmp/user_code',
         'LIB_DIR': '/tmp/parser',  # /var/spp/lib
         'USER_PROGRAM': 'usercode.c',
+        'USER_PROGRAM_INPUT' : 'programInput.txt',
         'LANG': sys.argv[1],
         'INCLUDE': '-I/var/spp/include',  # TODO: update this
         'PRETTY_DUMP': False
@@ -51,8 +52,9 @@ def setup_options():
         opts['FN'] = 'usercode.cpp'
     opts.update({
         'F_PATH': os.path.join(opts['PROGRAM_DIR'], opts['FN']),
+        'I_PATH': os.path.join(opts['PROGRAM_DIR'], opts['USER_PROGRAM_INPUT']),
         'VGTRACE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode.vgtrace'),
-        'EXE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode')
+        'EXE_PATH': os.path.join(opts['PROGRAM_DIR'], 'usercode'),
     })
     return opts
 
@@ -96,24 +98,27 @@ def check_for_valgrind_errors(opts, valgrind_stderr):
 
 def run_valgrind(opts):
     VALGRIND_EXE = os.path.join(opts['LIB_DIR'], 'valgrind-3.11.0/inst/bin/valgrind')
-    valgrind_p = Popen(
-        ['stdbuf', '-o0',  # VERY IMPORTANT to disable stdout buffering so that stdout is traced properly
-         VALGRIND_EXE,
-         '--tool=memcheck',
-         '--source-filename=' + opts['FN'],
-         '--trace-filename=' + opts['VGTRACE_PATH'],
-         opts['EXE_PATH']
-         ],
-        stdout=PIPE,
-        stderr=PIPE
-    )
-    (valgrind_stdout, valgrind_stderr) = valgrind_p.communicate()
-    valgrind_retcode = valgrind_p.returncode
-    valgrind_out = '\n'.join(
-        ['=== Valgrind stdout ===', valgrind_stdout.decode(), '=== Valgrind stderr ===', valgrind_stderr.decode()])
-    # print(valgrind_out)
-    end_of_trace_error_msg = check_for_valgrind_errors(opts, str(valgrind_stderr)) if valgrind_retcode != 0 else None
-    return valgrind_out, end_of_trace_error_msg
+
+    with open(opts['I_PATH'], 'r') as infile:
+        valgrind_p = Popen(
+            ['stdbuf', '-o0',  # VERY IMPORTANT to disable stdout buffering so that stdout is traced properly
+             VALGRIND_EXE,
+             '--tool=memcheck',
+             '--source-filename=' + opts['FN'],
+             '--trace-filename=' + opts['VGTRACE_PATH'],
+             opts['EXE_PATH'],
+             ],
+            stdin=infile,
+            stdout=PIPE,
+            stderr=PIPE
+        )
+        (valgrind_stdout, valgrind_stderr) = valgrind_p.communicate()
+        valgrind_retcode = valgrind_p.returncode
+        valgrind_out = '\n'.join(
+            ['=== Valgrind stdout ===', valgrind_stdout.decode(), '=== Valgrind stderr ===', valgrind_stderr.decode()])
+        # print(valgrind_out)
+        end_of_trace_error_msg = check_for_valgrind_errors(opts, str(valgrind_stderr)) if valgrind_retcode != 0 else None
+        return valgrind_out, end_of_trace_error_msg
 
 
 def get_opt_trace_from_vg_trace(opts, end_of_trace_error_msg):
