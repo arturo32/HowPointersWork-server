@@ -31,6 +31,12 @@ func Handler(c web.Context) error {
 		return nil
 	}
 
+	er.Input = strings.TrimSpace(er.Input)
+	if !sanitizeInput(er.Input) {
+		log.Debug().Msgf("invalid_input: \"%s\"", er.Input)
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "invalid_input"})
+	}
+
 	log.Debug().Msgf("%s", er.Code)
 
 	task, err := buildTask(er)
@@ -100,6 +106,11 @@ func Handler(c web.Context) error {
 	}
 }
 
+func sanitizeInput(input string) bool {
+	re := regexp.MustCompile(`^(([\p{Latin}\p{N}]*|\p{N}+[.,]\p{N}+)[\s\n]*)*$`)
+	return re.MatchString(input)
+}
+
 func buildTask(er ExecRequest) (input.Task, error) {
 	var image string
 	var run string
@@ -142,7 +153,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	if debug_valgrind {
 		run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
 	} else {
-		run += "python3 /tmp/parser/wsgi_backend.py " + language + " " + er.Input + " > $TORK_OUTPUT"
+		run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
 	}
 
 	return input.Task{
