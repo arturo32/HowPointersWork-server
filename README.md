@@ -1,8 +1,10 @@
 # How Pointers Work - Server
 
-Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and this [clone of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor). 
+Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and this [fork of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor). 
 
+<a href="https://github.com/arturo32/HowPointersWork">Click here to go to the frontend repository</a>.
 
+And <a href="https://github.com/runabol/tork"> click here to go to the Tork repository</a>.
 
 ## Running
 
@@ -29,8 +31,6 @@ sudo docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -it 
 
 ### Without docker
 
-
-
 You'll need:
 
 - [Go](https://golang.org/) version 1.19 or better installed.
@@ -50,9 +50,6 @@ First, build the image:
 sudo docker build -f Dockerfile.main -t hpw-server .
 ```
 
-
-
-
 Start the server:
 
 ```bash
@@ -68,12 +65,6 @@ curl \
   -H "content-type:application/json" \
   -d '{"language":"c","code":"#include <stdio.h>\n\nint main(){\nint i = 23;\nint *k = &i;\nreturn 0;\n}"}' \
   http://localhost:8000/execute
-```
-
-Should output:
-
-```bash
-hello world
 ```
 
 You can try changing the `language` to `c++`.
