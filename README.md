@@ -23,6 +23,11 @@ Then, we build the main image:
 sudo docker build -f Dockerfile.main -t hpw-server .
 ```
 
+Then, we build and run postgres:
+```sh
+sudo docker run -d --name tork-postgres -p 5432:5432 -e POSTGRES_PASSWORD=tork -e POSTGRES_USER=tork  -e PGDATA=/var/lib/postgresql/data/pgdata   -e POSTGRES_DB=tork postgres:15.3
+```
+
 As ["Docker in docker" is unadvised](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/), we run the main container using the `-v` flag that will bind the most internal container image docker socket to the external docker. Ps.: `--network=host/--net=host` don't work on Windows.
 
 ```bash
@@ -39,15 +44,7 @@ You'll need:
 Build the gcc compiler image:
 
 ```bash
-`docker build -t gcc-compiler .`
-```
-
-
-Start the server with docker:
-
-First, build the image:
-```bash
-sudo docker build -f Dockerfile.main -t hpw-server .
+docker build -t gcc-compiler .
 ```
 
 Start the server:
