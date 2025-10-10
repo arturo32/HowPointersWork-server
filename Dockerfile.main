@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine
+FROM golang:1.24-alpine
 
 WORKDIR /app
 
@@ -20,8 +20,7 @@ RUN apk add --no-cache docker-cli
 
 EXPOSE 8000
 
-# ENTRYPOINT ["/server", "migration"]
-ENTRYPOINT ["/server", "run", "standalone"]
+ENTRYPOINT /server migration || /server run standalone
 
 # For debugging
 # CMD ["/bin/sh"]
