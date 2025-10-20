@@ -7,13 +7,9 @@ Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-cod
 And <a href="https://github.com/runabol/tork"> click here to go to the Tork repository</a>.
 
 ## Running
-
-### With docker
-
 This project is composed of two images: One that will run the Go program and other that will be run by Tork.
 
 So we need to first build the image that Tork will use (the one that will compile and run the custom valgrind):
-
 ```bash
 sudo docker build -f Dockerfile -t gcc-compiler .
 ```
@@ -23,7 +19,21 @@ Then, we build the main image:
 sudo docker build -f Dockerfile.main -t hpw-server .
 ```
 
-Then, we build and run postgres:
+### With docker compose
+
+```sh
+apt install haveged # docker compose use of random things like.. name creation?
+sudo docker compose up -d
+```
+
+To see **logs**, run:
+```sh
+sudo docker compose logs hpw-server
+```
+
+### Without docker compose
+
+We build and run postgres:
 ```sh
 sudo docker run -d --name tork-postgres -p 5432:5432 -e POSTGRES_PASSWORD=tork -e POSTGRES_USER=tork  -e PGDATA=/var/lib/postgresql/data/pgdata   -e POSTGRES_DB=tork postgres:15.3
 ```
@@ -31,27 +41,9 @@ sudo docker run -d --name tork-postgres -p 5432:5432 -e POSTGRES_PASSWORD=tork -
 As ["Docker in docker" is unadvised](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/), we run the main container using the `-v` flag that will bind the most internal container image docker socket to the external docker. Ps.: `--network=host/--net=host` don't work on Windows.
 
 ```bash
-sudo docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -it hpw-server
+sudo docker run -v /var/run/docker.sock:/var/run/docker.sock --network=host -d hpw-server
 ```
 
-### Without docker
-
-You'll need:
-
-- [Go](https://golang.org/) version 1.19 or better installed.
-- Docker
-
-Build the gcc compiler image:
-
-```bash
-docker build -t gcc-compiler .
-```
-
-Start the server:
-
-```bash
-go run main.go run standalone
-```
 
 Execute a code snippet. Example
 

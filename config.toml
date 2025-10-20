@@ -1,5 +1,8 @@
+[endpoint]
+address = "http://localhost:80"
+
 [coordinator]
-address = "0.0.0.0:8000"
+address = "0.0.0.0:80"
 
 [coordinator.api]
 endpoints.health = true
@@ -20,6 +23,12 @@ origins = "*"
 methods = "POST"
 credentials = false
 headers = "*"
+
+[datastore]
+type = "postgres"
+
+[datastore.postgres]
+dsn = "host=postgres user=tork password=tork dbname=tork port=5432 sslmode=disable"
 
 #[logging]
 #level = "info"   # debug | info | warn | error

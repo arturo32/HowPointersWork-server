@@ -18,7 +18,7 @@ RUN apk add --no-cache docker-cli
 
 
 
-EXPOSE 8000
+EXPOSE 80
 
 ENTRYPOINT /server migration || /server run standalone
 
