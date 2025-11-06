@@ -97,7 +97,7 @@ def check_for_valgrind_errors(opts, valgrind_stderr):
 
 
 def run_valgrind(opts):
-    VALGRIND_EXE = os.path.join(opts['LIB_DIR'], 'valgrind-3.11.0/inst/bin/valgrind')
+    VALGRIND_EXE = os.path.join(opts['LIB_DIR'], 'valgrind/inst/bin/valgrind') # version 3.11.0
 
     with open(opts['I_PATH'], 'r') as infile:
         valgrind_p = Popen(

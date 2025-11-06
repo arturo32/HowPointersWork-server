@@ -1,10 +1,22 @@
 # How Pointers Work - Server
 
-Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and this [fork of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor). 
+This server receives HTTP requests with C/C++ code and returns the **stackstrace** of the first 300 lines that are run. The stacktrace contains the state of each line, both in the stack and heap: names, types and addresses of variables, the current function name and signature, etc.
 
-<a href="https://github.com/arturo32/HowPointersWork">Click here to go to the frontend repository</a>.
 
-And <a href="https://github.com/runabol/tork"> click here to go to the Tork repository</a>.
+It was inspired by [this article](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) on [Tork engine](https://github.com/runabol/tork) and this [fork of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor).
+
+This system also has a <a href="https://github.com/arturo32/HowPointersWork">frontend repository</a>.
+
+## How it works
+
+Theres is 2 kinds of containers in this backend server (actually 3, but let's no focus on that for now): one that holds the Go application that uses Tork and other that is the sandbox where the C/C++ code is compiled and run with Valgrind.
+
+<img src="images/containers.png" alt="Diagram with three containers: the first is an application container that hosts the “Go” image. This image has an arrow pointing to the next container, the sandbox that contains the Ubuntu image. These two containers are in the backend region. The first container exchanges HTTP communication arrows with an external container, the frontend with the Node image.">
+
+See the big arrow in the image above? That is Tork managing and creating a container as a task when it receives a request. 
+
+
+<img src="images/sequence.png">
 
 ## Running
 This project is composed of two images: One that will run the Go program and other that will be run by Tork.

@@ -5706,6 +5706,8 @@ Int           MC_(clo_mc_level)               = 2;
 Bool          MC_(clo_show_mismatched_frees)  = True;
 Bool          MC_(clo_expensive_definedness_checks) = False;
 
+HChar pg_source_filename[1000]; // arturo32
+
 static const HChar * MC_(parse_leak_heuristics_tokens) =
    "-,stdstring,length64,newarray,multipleinheritance";
 /* The first heuristic value (LchNone) has no keyword, as this is
