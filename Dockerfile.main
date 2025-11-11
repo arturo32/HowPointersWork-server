@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine
+FROM golang:1.23.0-alpine3.19
 
 WORKDIR /app
 
@@ -11,12 +11,9 @@ COPY config.toml .
 RUN go mod download
 RUN go build -o /server main.go
 
-# Downloading docker
-RUN apk update
-RUN apk upgrade
-RUN apk add --no-cache docker-cli
-
-
+# RUN apk update
+# RUN apk upgrade
+# RUN apk add --no-cache podman
 
 EXPOSE 80
 

@@ -150,11 +150,11 @@ func buildTask(er ExecRequest) (input.Task, error) {
 			// If the TORK_OUTPUT is not empty, i.e., an error happened, do nothing
 			"[ -s \"${TORK_OUTPUT}\" ] || "
 
-	if debug_valgrind {
-		run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
-	} else {
-		run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
-	}
+	run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
+
+	//if debug_valgrind {
+	//	run += "; cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
+	//}
 
 	return input.Task{
 		Name:    "execute code",

@@ -54,6 +54,8 @@
 #include "pub_tool_vki.h" // pgbovine
 #include "pub_tool_libcfile.h" // pgbovine
 
+HChar pg_source_filename[1000]; // arturo32
+
 
 /* Set to 1 to enable handwritten assembly helpers on targets for
    which it is supported. */
@@ -5706,7 +5708,6 @@ Int           MC_(clo_mc_level)               = 2;
 Bool          MC_(clo_show_mismatched_frees)  = True;
 Bool          MC_(clo_expensive_definedness_checks) = False;
 
-HChar pg_source_filename[1000]; // arturo32
 
 static const HChar * MC_(parse_leak_heuristics_tokens) =
    "-,stdstring,length64,newarray,multipleinheritance";
