@@ -1,10 +1,25 @@
 # How Pointers Work - Server
 
-Inspired by this [article on Tork engine](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) and this [fork of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor). 
+This server receives HTTP requests with C/C++ code and returns the **stackstrace** of the first 300 lines that are run. The stacktrace contains the state of each line, both in the stack and heap: names, types and addresses of variables, the current function name and signature, etc.
 
-<a href="https://github.com/arturo32/HowPointersWork">Click here to go to the frontend repository</a>.
 
-And <a href="https://github.com/runabol/tork"> click here to go to the Tork repository</a>.
+It was inspired by [this article](https://dev.to/acoh3n/lets-build-a-code-execution-engine-4kgi) on [Tork engine](https://github.com/runabol/tork) and this [fork of Philip Guo's Python Tutor](https://github.com/meghaagr13/CTutor).
+
+This system also has a <a href="https://github.com/arturo32/HowPointersWork">frontend repository</a>.
+
+## How it works
+
+There are 2 kinds of containers in this backend server (actually 3, but let's not focus on that for now): one that holds the Go application that uses Tork and other that is the sandbox where the C/C++ code is compiled and run with Valgrind.
+
+<img src="images/containers.png" alt="Diagram with three containers: the first is an application container that hosts the “Go” image. This image has an arrow pointing to the next container, the sandbox that contains the Ubuntu image. These two containers are in the backend region. The first container exchanges HTTP communication arrows with an external container, the frontend with the Node image.">
+
+See the big arrow in the image above? That is Tork managing and creating a container as a task when it receives a request. Inside this new container the code is compiled and run through a modified version of Valgrind (made by Philip Guo). It then returns the stacktrace of the code to the client.
+
+<img src="images/sequence.png" alt="Sequence diagram: The user accesses the frontend, which sends a request to the backend. The backend creates an Ubuntu instance with bash, which compiles the code and executes a Python script. This, in turn, executes valgrind, which returns the stack trace. The stack trace is parsed in the Python script, which returns the stack trace to bash. The Ubuntu instance is then terminated and returns the stack trace to the backend, which responds to the frontend." />
+
+The extra container mentioned at the beginning is the database used by Tork to manage tasks: PostgreSQL.
+
+One caveat of this system is that the Valgrind version is very old: from 2013/2014. The original code run in a Ubuntu 14 container, with gcc 4.8.4. I managed to update to a Debian 9 container, with gcc 6.3.0 pulled from archived repositories of `apt`. Above that, some weird errors happens that I don't remember. With containers with gcc 10 it changes the error to "lack of debug symbols" (or something like that) from newer versions of libc6-dbg.
 
 ## Running
 This project is composed of two images: One that will run the Go program and other that will be run by Tork.
@@ -65,3 +80,6 @@ go list -m -u github.com/runabol/tork #find last version
 go get github.com/runabol/tork@v0.1.121 #get last version
 go mod tidy #syncronize dependencies
 ```
+
+# to-do
+- Make it don't jump commands inside for loops.

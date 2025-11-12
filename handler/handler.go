@@ -138,7 +138,7 @@ func buildTask(er ExecRequest) (input.Task, error) {
 	}
 
 	run =
-		// Move file
+	// Move file
 		"mv " + filename + " /tmp/user_code/" + filename + "; " +
 
 			// Create file with the user input in the same directory of the program source file
@@ -150,10 +150,10 @@ func buildTask(er ExecRequest) (input.Task, error) {
 			// If the TORK_OUTPUT is not empty, i.e., an error happened, do nothing
 			"[ -s \"${TORK_OUTPUT}\" ] || "
 
+	run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
+
 	if debug_valgrind {
-		run += "cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
-	} else {
-		run += "python3 /tmp/parser/wsgi_backend.py " + language + " > $TORK_OUTPUT"
+		run += "; cat /tmp/user_code/usercode.vgtrace > $TORK_OUTPUT"
 	}
 
 	return input.Task{
