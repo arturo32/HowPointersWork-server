@@ -17,8 +17,8 @@
 # a conditional jump with unitialized variables.
 
 
-# gcc 6.3.0; libc6-dtg 2.24-11+deb9u4
-FROM debian:9.13-slim as build
+# gcc 6.3.0; libc6-dbg 2.24-11+deb9u4
+FROM debian:9.13-slim AS build
 
 
 # Install gcc, g++, valgrind, and gdb
