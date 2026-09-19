@@ -19,7 +19,7 @@ See the big arrow in the image above? That is Tork managing and creating a conta
 
 The extra container mentioned at the beginning is the database used by Tork to manage tasks: PostgreSQL.
 
-One caveat of this system is that the Valgrind version is very old: from 2013/2014. The original code run in a Ubuntu 14 container, with gcc 4.8.4. I managed to update to a Debian 9 container, with gcc 6.3.0 pulled from archived repositories of `apt`. Above that, some weird errors happens that I don't remember. With containers with gcc 10 it changes the error to "lack of debug symbols" (or something like that) from newer versions of libc6-dbg.
+The original code ran in a Ubuntu 14 container with gcc 4.8.4, using a Valgrind fork (by Philip Guo, for his Online Python Tutor project) patched against Valgrind 3.11.0 (from 2015). That old Valgrind's memcheck couldn't parse the debug info newer glibc/gcc versions produce, which capped the container at Debian 9 / gcc 6.3.0 for a long time. The patch has since been ported forward onto Valgrind 3.27.1, so the sandbox now runs on a current Debian 12 container with gcc 12.
 
 ## Running
 This project is composed of two images: One that will run the Go program and other that will be run by Tork.

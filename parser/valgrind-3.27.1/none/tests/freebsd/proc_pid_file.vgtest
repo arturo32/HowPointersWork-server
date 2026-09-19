@@ -1,0 +1,4 @@
+prereq: test -d /proc
+prog: proc_pid_file
+vgopts: -q
+

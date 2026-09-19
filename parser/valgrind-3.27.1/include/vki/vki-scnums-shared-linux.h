@@ -1,0 +1,70 @@
+
+/* System call numbers for Linux that are shared across all architectures. */
+
+/*
+   This file is part of Valgrind, a dynamic binary instrumentation
+   framework.
+
+   Copyright (C) 2019 Bart Van Assche <bvanassche@acm.org>
+
+   This program is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation; either version 3 of the
+   License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+   The GNU General Public License is contained in the file COPYING.
+*/
+
+#ifndef __VKI_SCNUMS_SHARED_LINUX_H
+#define __VKI_SCNUMS_SHARED_LINUX_H
+
+// Derived from linux-5.2/include/uapi/asm-generic/unistd.h
+
+#define __NR_pidfd_send_signal	424
+#define __NR_io_uring_setup	425
+#define __NR_io_uring_enter	426
+#define __NR_io_uring_register	427
+#define __NR_open_tree		428
+#define __NR_move_mount		429
+#define __NR_fsopen		430
+#define __NR_fsconfig		431
+#define __NR_fsmount		432
+#define __NR_fspick		433
+
+#define __NR_pidfd_open		434
+#define __NR_clone3		435
+#define __NR_close_range	436
+#define __NR_openat2        437
+#define __NR_pidfd_getfd	438
+#define __NR_faccessat2		439
+
+#define __NR_epoll_pwait2		441
+
+#define __NR_mount_setattr		442
+#define __NR_quotactl_fd                443
+#define __NR_landlock_create_ruleset	444
+#define __NR_landlock_add_rule		445
+#define __NR_landlock_restrict_self	446
+
+#define __NR_memfd_secret		447
+
+#define __NR_cachestat		451
+#define __NR_fchmodat2		452
+#define __NR_statmount		457
+#define __NR_listmount		458
+#define __NR_lsm_get_self_attr	459
+#define __NR_lsm_set_self_attr	460
+#define __NR_lsm_list_modules   461
+#define __NR_mseal		462
+#define __NR_file_getattr	468
+#define __NR_file_setattr	469
+
+#endif

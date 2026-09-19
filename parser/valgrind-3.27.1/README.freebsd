@@ -1,0 +1,354 @@
+Installing from ports or via pkg
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can install Valgrind using either
+
+pkg install devel/valgrind
+
+or alternatively from ports (if installed)
+
+cd /usr/ports/devel/valgrind && make install clean
+
+devel/valgrind is updated with official releases of Valgrind, normally
+in April and October each year. There is an alternative port,
+devel/valgrind-devel which occasionally gets updated from the latest
+Valgrind source. If you want to have the latest port, check on
+https://www.freshports.org/ to see which is the most recent. If you
+want to have the very latest version, you will need to build a copy
+from source. See README for instructions on getting the source with git.
+
+
+Building Valgrind
+~~~~~~~~~~~~~~~~~
+
+Install ports for autotools, gmake and python.
+
+$ sh autogen.sh
+$ ./configure --prefix=/where/ever
+$ gmake
+$ gmake install
+
+If you are using a jail for building, make sure that it is configured so that
+"uname -r" returns a string that matches the pattern "XX.Y-*" where XX is the
+major version (12, 13, 14 ...) and Y is the minor version (0, 1, 2, 3).
+
+Known Limitations (June 2022)
+
+0. Be aware that if you use a wrapper script and run Valgrind on the wrapper
+   script Valgrind may hit restrictions if the wrapper script runs any
+   Capsicum enabled applications. Examples of Capsicum enabled applications
+   are echo, basename, tee, uniq and wc. It is recommended that you either
+   avoid these applications or that you run Valgrind directly on your test
+   application.
+1. There are some limitations when running Valgrind on code that was compiled
+   with clang.  These issues are not present with code compiled with GCC.
+   a) There may be missing source information concerning variables due
+      to DWARF extensions used by GCC.
+   b) Code that uses OpenMP will generate spurious errors.
+2. vgdb invoker, which uses ptrace, may cause system calls to be
+   interrupted. As an example, if the debuggee seems to have be
+   stuck and you press Ctrl-C in gdb the debuggee may execute
+   one more statement before stopping and returning control to
+   gdb.
+
+Notes for Developers
+~~~~~~~~~~~~~~~~~~~~
+
+See README_DEVELOPERS, README_MISSING_SYSCALL_OR_IOCTL and docs/*
+for more general information for developers.
+
+0. Adding syscalls.
+
+When adding syscalls, you need to look at the manpage and also syscalls.master
+(online at
+https://github.com/freebsd/freebsd/blob/master/sys/kern/syscalls.master
+and for 32bit
+https://github.com/freebsd/freebsd/blob/master/sys/compat/freebsd32/syscalls.master
+
+and if you installed the src package there should also be
+
+/usr/src/sys/kern/syscalls.master
+and
+/usr/src/sys/compat/freebsd32/syscalls.master)
+
+syscalls.master is particularly useful for seeing quickly whether parameters
+are inputs or outputs.
+
+The syscall wrappers can vary from trivial to difficult. Fortunately, many are
+either trivial (no arguments) or easy (Valgrind just needs to know what memory
+is being read or written). Some syscalls, such as those involving process
+creation and termination, signals and memory mapping require deeper interaction
+with Valgrind.
+
+When you add syscalls you will need to modify several files
+   a) include/vki/vki-scnums-freebsd.h
+      This file contains one #define for each syscall. The _NR_ prefix (Linux
+      style) is used rather than SYS_ for compatibility with the rest of the
+      Valgrind source.
+   b) coregrind/m_syswrap/priv_syswrap-freebsd.h
+      This uses the DECL_TEMPLATE macro to generate declarations for the syscall
+      before and after wrappers.
+   c) coregrind/m_syswrap/syswrap-freebsd.c
+      This is where the bulk of the code resides. Toward the end of the file
+      the BSDX_/BSDXY macros are used to generate entries in the table of
+      syscalls. BSDX_ is used for wrappers that only have a 'before', BSDXY
+      if both wrappers are required. In general, syscalls that have no arguments
+      or only input arguments just need a BSDX_ macro (before only). Syscalls
+      with output arguments need a BSDXY macro (before and after).
+   d) If the syscall uses 64bit arguments (long long) then instead of putting
+      the wrapper definitions in syswrap-freebsd.c there will be two kinds of
+      definition. A 32bit version with split 64bit arguments for x86 in
+      syswrap-x86-freebsd.c and 64bit versions without any splitting for amd64
+      and arm64 in syswrap-amd64-freebsd.c/syswrap-arm64-freebsd.c.
+      Each long long needs to be split into two ARGs in the x86 version.
+
+The PRE (before) wrapper
+------------------------
+
+Each PRE wrapper always contains the following two macro calls
+
+PRINT. This outputs the syscall name and argument values when Valgrind is
+executed with
+--trace-syscalls=yes
+
+PRE_READ_REGX. This macro lets Valgrind know about the number and types of the
+syscall arguments which allows Valgrind to check that they are initialized.
+X is the number of arguments. It is best that the argument names match
+the man page, but they must match the types and number of arguments in
+syscalls.master. Occasionally there are differences between the two.
+
+If the syscall takes pointers to memory there will be one of the following for
+each pointer argument.
+
+PRE_MEM_RASCIIZ for NULL terminated ascii strings.
+
+PRE_MEM_READ for pointers to structures or arrays that are read.
+
+PRE_MEM_WRITE for pointers to structures or arrays that are written.
+
+As a rule, the definitions of structures are copied into vki-freebsd.h
+with the vki- prefix. [vki - Valgrind kernel interface; this was done
+historically to protect against discrepancies between user include
+structure definitions and kernel definitions on Linux].
+
+The POST (after) wrapper
+------------------------
+
+These are much easier.
+
+They just contain a POST_MEM_WRITE macro for each output argument.
+
+1. Frequent causes of problems
+
+- New _umtx_op codes. Valgrind will print "WARNING: _umtx_op unsupported value".
+  See syswrap-freebsd.c and add new cases for the new codes.
+- Additions to auxv. Depending on the entry it may need to be simply copied
+  from the host to the guest, it may need to be modified for the guest or
+  it may need to be ignored. See initimg-freebsd.c.
+- Versioned ioctls. ioctls such as CAMIOCOMMAND are versioned (with
+  CAM_VERSION). When the version number is increased the result is a new
+  ioctl ID. That means that the ioctl checking code no longer gets called.
+  New versions require updates to the version number and the structs that
+  are used. (Backwards compatibility is maintained by adding fixed macros
+  like CAM_VERSION_0x19, but these are not currently supported in Valgrind).
+- ELF PT_LOAD mappings. Either Valgrind will assert or there will be no source
+  information in error reports. See VG_(di_notify_mmap) in debuginfo.c
+- Because they contain many deliberate errors the regression tests are prone
+  to change with changes of compiler. Liberal use of 'volatile' and
+  '-Wno-warning-flag' can help - see configure.ac
+
+2. Running regression tests
+
+In order to run all of the regression tests you will need to install
+the following packages
+gdb
+gsed
+
+In addition to running "gmake" you will need to run
+"gmake check" to build the regression test exectutables
+and "gmake regtest".  Again, more details can be seen in
+README_DEVELOPERS.
+
+If you want to run the 'nightly' script (see nightly/README.txt)
+you will need to install coreutils (for GNU cp) and modify the
+nightly/conf/freebsd.* files. The default configuration
+sends an e-mail to the valgrind-testresults mailing list.
+
+3. Version specific code
+
+For its own use of syscalls and memory layout Valgrind sometimes needs
+to detect which version of FreeBSD it is being built on. Historically
+that was done using 'uname' at configure time. It can also be achieved
+using the __FreeBSD_version macro (in osreldate.h and sys/param.h).
+The former header just defines that macro. To see what changes are associated
+with different values of the macro you can search the FreeBSD source and
+git history. You can also look at
+
+https://docs.freebsd.org/en/books/porters-handbook/versions/
+
+More about syscalls
+-------------------
+
+One thing that is specific to FreeBSD (and Darwin) is how the "syscall()"
+libc function is implemented. On Linux this function shuffles the arguments
+so that "syscall(__NR_write, 1, data, len)" will result in syscall
+__NR_write (4) with arguments 1, data, len. On FreeBSD (and Darwin) this
+shuffling is not done in libc, it is done in the kernel. FreeBSD has two
+special "syscall syscalls". These are syscalls 0 and 198, which take
+the target syscall number and its arguments as parameters.
+"syscall(SYS_write, 1, data, len)" on FreeBSD will result in
+syscall SYS_syscall (0) with arguments 4 (SYS_write), 1, data, len. The
+kernel will then call kern_write with arguments 1, data, len.
+
+The way that syscall arguments are passed on FreeBSD depends on the
+architecture. On x86 they are all on the stack. On arm64 they are
+all in registers. On amd64 the syscall number and the first six arguments
+are in registers and any further arguments are on the stack.
+
+There are two ways that Valgrind makes syscalls.
+a) for its own use as the host
+b) on behalf of the guest.
+
+The first category are fairly straightforward. These are called via a
+series of macros from VG_(do_syscall0) to VG_(do_syscall8). The number
+indicates the argument count. The macros expand to VG_(do_syscall) which
+uses do_syscall_WRK to do the job in assembler.
+
+The second category can be much more complicated. It is all done in
+VG_(client_syscall). There are extensive explanations in the same file,
+syswrap-main.c. The main things that this function does are
+
+i.    Get the syscall arguments with getSyscallArgsFromGuestState. This function
+      has special handling for "syscall syscall". Since we want to validate
+      the arguments of the final syscall getSyscallArgsFromGuestState will shuffle
+      the arguments to be in the order of the final syscall (canonical order).
+      In order to be able to distinguish between "syscall syscall" and other syscalls
+      two syscall numbers may be stored, original_sysno and canonical_sysno.
+      Usually they are the same, only differing for "syscall syscall".
+ii.   Call getSyscallArgLayout. This is always in canonical form. The layout
+      indicates whether arguments are in registers or on the stack. On FreeBSD
+      with "syscall syscall" the arguments are effectively bumped up one slot.
+      That means that there is special handling for argument 6 on amd64,
+      which can either be in a register or on the stack depending on whether
+      it is a regular syscall or "syscall syscall".
+iii.  Call a pre-syscall tool hook (mainly used for syscall timing by callgrind
+      and cachegrind). This uses the args from step i.
+iv.   Call the PRE handler. That uses the arguments fetched in step i and the layout
+      obtained in step ii. The PRE_REG_READX macros use the layout and
+      the PRE_MEM_READ/WRITE and ARGX macros use the canonical arguments.
+
+Several things are possible at this point. The PRE may have performed the
+syscall or marked it as complete. The syscall may be marked as blocking.
+If the syscall is not blocking then Valgrind just makes the syscall and stores
+the result. Blocking system calls are more complicated and continue as follows.
+
+v.    Put back the syscall arguments with putSyscallArgsIntoGuestState()
+      (they may have changed in the PRE). On FreeBSD the original_sysno is checked
+      to see which form of unshuffling needs to be done.
+vi.   Call the syscall via ML_(do_syscall_for_client_WRK). This is preceded
+      by releasing the global lock and restoring the client signal mask, and
+      followed by blocking signals and acquiring the global lock. 
+vii.  Get the syscall arguments again with getSyscallArgsFromGuestState.
+      This is only required to match the non-blocking flow.
+
+The final two steps are for both blocking and non-blocking system calls.
+
+viii. Put the syscall result into the guest state.
+ix.   Call the post handler.
+
+Capsicum enabled applications
+-----------------------------
+Valgrind will not work well with Capsicum enabled applications. As an example,
+if you run
+
+valgrind --tool=massif echo hello
+
+you will get something like this in the output:
+
+==66088==
+==66088== WARNING: Valgrind may not operate correctly in capability mode.
+==66088==          Please consider disabling capability by using the RUNNING_ON_VALGRIND mechanism.
+==66088==          See http://valgrind.org/docs/manual/manual-core-adv.html#manual-core-adv.clientreq
+hello
+==66088==
+==66088== Error: can not open xtree output file `/home/paulf/massif.out.66088'
+
+Additionally capabilities mode can affect how the kernel uses syscall
+parameters. An example of this is the fd argument of the *at() syscall
+family. In capability mode fd must not be AT_FDCWD. The consequence
+of this is that we ought do adapt the syscall parameter checking depending
+on whether the guest is running in capability mode or not. Since we do not
+recommend running Capsicum enabled applications under Valgrind the checks
+are not adapted to to capability mode. Not to mention that adding checks
+for this would add a lot of complexity to these syscall wrappers
+
+One way that you might conditionally disable capabilities in your code as the
+above warning suggests is to do as follows.
+
+#if !defined(NDEBUG)
+#include <valgrind/valgrind.h>
+#endif
+
+void do_capsicum_setup(void); // contains capabilities code
+
+#if !defined(NDEBUG)
+    if (!RUNNING_ON_VALGRIND)
+    {
+#endif
+        do_capsicum_setup();
+#if !defined(NDEBUG)
+    }
+#endif
+
+
+Feedback
+~~~~~~~~
+
+If you find any problems please create a bugzilla report at
+https://bugs.kde.org using the Valgrind product.
+
+Alternatively you can use the FreeBSD bugzilla
+https://bugs.freebsd.org
+
+Credits
+~~~~~~~
+
+Valgrind was originally ported to FreeBSD by Doug Rabson
+in 2004.
+
+Paul Floyd (that's me), started looking at this project in late 2018,
+took a long pause and then continued in earnest in January 2020.
+
+A big thanks to Nick Briggs for helping with the x86 version.
+
+Kyle Evans and Ed Maste for contributing patches and helping with the
+integration with FreeBSD ports.
+
+Prior to 2018 many others have also contributed.
+
+Dimitry Andric
+Simon Barner
+Roman Bogorodskiy
+Rebecca Cran
+Bryan Drewery
+Brian Fundakowski Feldman
+Denis Generalov
+Mikolaj Golub
+Eugene Kilachkoff
+Xin LI
+Phil Longstaff
+Pav Lucistnik
+Conrad Meyer
+Julien Nadeau
+Frerich Raabe
+Doug Rabson
+Craig Rodrigues
+Tom Russo
+Stephen Sanders
+Stanislav Sedov
+Andrei V. Shetuhin
+Niklas Sorensson
+Ryan Stone
+Jerry Toung
+Yuri
+

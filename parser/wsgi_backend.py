@@ -97,7 +97,7 @@ def check_for_valgrind_errors(opts, valgrind_stderr):
 
 
 def run_valgrind(opts):
-    VALGRIND_EXE = os.path.join(opts['LIB_DIR'], 'valgrind-3.11.0/inst/bin/valgrind') # version 3.11.0
+    VALGRIND_EXE = os.path.join(opts['LIB_DIR'], 'valgrind-3.27.1/inst/bin/valgrind') # version 3.27.1
     with open(opts['I_PATH'], 'r') as infile:
         valgrind_p = Popen(
             ['stdbuf', '-o0',  # VERY IMPORTANT to disable stdout buffering so that stdout is traced properly
@@ -135,7 +135,7 @@ def get_opt_trace_from_vg_trace(opts, end_of_trace_error_msg):
 def generate_trace(opts, gcc_stderr):
     gcc_stderr = '\n'.join(['=== gcc stderr ===', gcc_stderr, '==='])
     (valgrind_out, end_of_trace_error_msg) = run_valgrind(opts)
-    (postprocess_stdout, postprocess_stderr) = get_opt_trace_from_vg_trace(opts, valgrind_out)
+    (postprocess_stdout, postprocess_stderr) = get_opt_trace_from_vg_trace(opts, end_of_trace_error_msg)
     std_err = '\n'.join([gcc_stderr, valgrind_out, postprocess_stderr])
     return std_err, postprocess_stdout
 

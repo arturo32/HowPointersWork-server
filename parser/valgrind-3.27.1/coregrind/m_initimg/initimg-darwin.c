@@ -1,0 +1,810 @@
+
+/*--------------------------------------------------------------------*/
+/*--- Startup: create initial process image on Darwin              ---*/
+/*---                                             initimg-darwin.c ---*/
+/*--------------------------------------------------------------------*/
+
+/*
+   This file is part of Valgrind, a dynamic binary instrumentation
+   framework.
+
+   Copyright (C) 2000-2017 Julian Seward
+      jseward@acm.org
+
+   This program is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation; either version 3 of the
+   License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+   The GNU General Public License is contained in the file COPYING.
+*/
+
+#if defined(VGO_darwin)
+
+#include "pub_core_basics.h"
+#include "pub_core_vki.h"
+#include "pub_core_debuglog.h"
+#include "pub_core_libcbase.h"
+#include "pub_core_libcassert.h"
+#include "pub_core_libcfile.h"
+#include "pub_core_libcproc.h"
+#include "pub_core_libcprint.h"
+#include "pub_core_xarray.h"
+#include "pub_core_clientstate.h"
+#include "pub_core_aspacemgr.h"
+#include "pub_core_mallocfree.h"
+#include "pub_core_machine.h"
+#include "pub_core_ume.h"
+#include "pub_core_mach.h"
+#include "pub_core_options.h"
+#include "pub_core_tooliface.h"       /* VG_TRACK */
+#include "pub_core_threadstate.h"     /* ThreadArchState */
+#include "pub_core_pathscan.h"        /* find_executable */
+#include "pub_core_initimg.h"         /* self */
+
+// change this to one to see the env/apple pointer area that Darwin gives us
+// and also the env and apple pointer area that we pass on to the guest
+#define DEBUG_ENV_APPLE 0
+
+#if (DEBUG_ENV_APPLE)
+static void print_env_apple(HChar** envp, const HChar* where)
+{
+   int i;
+   int j;
+   HChar** apple;
+   VG_(printf)("Start env and apple pointer strings at %s\n", where);
+
+   for (i = 0; envp[i]; ++i) {
+      VG_(printf)("initimg-darwin: i %d &envp[i] %p envp[i] %s\n", i, &envp[i], envp[i]);
+   }
+   // should be NULL
+   VG_(printf)("initimg-darwin: i %d &envp[i] %p envp[i] %s\n", i, &envp[i], envp[i]);
+
+   apple = &envp[i];
+   ++apple;
+
+   for (j = 0; apple[j]; ++j) {
+      VG_(printf)("initimg-darwin: j %d &apple[j] %p apple[j] %s\n", j, &apple[j], apple[j]);
+   }
+   VG_(printf)("initimg-darwin: j %d &apple[j] %p apple[j] %s\n", j, &apple[j], apple[j]);
+   VG_(printf)("End env and apple pointer strings at %s\n", where);
+}
+#endif
+
+
+/*====================================================================*/
+/*=== Loading the client                                           ===*/
+/*====================================================================*/
+
+/* Load the client whose name is VG_(argv_the_exename). */
+
+static void load_client ( /*OUT*/ExeInfo* info, 
+                          /*OUT*/Addr*    client_ip)
+{
+   const HChar* exe_name;
+   Int    ret;
+
+   vg_assert( VG_(args_the_exename) != NULL);
+   vg_assert( VG_(strlen)(VG_(args_the_exename)) >= 1 );
+   exe_name = VG_(find_executable)( VG_(args_the_exename) );
+
+   if (!exe_name) {
+      VG_(printf)("valgrind: %s: command not found\n", VG_(args_the_exename));
+      VG_(exit)(127);      // 127 is Posix NOTFOUND
+   }
+
+   VG_(memset)(info, 0, sizeof(*info));
+   ret = VG_(do_exec)(exe_name, info);
+   if (ret < 0) {
+      VG_(printf)("valgrind: could not execute '%s'\n", exe_name);
+      VG_(exit)(1);
+   }
+
+   // The client was successfully loaded!  Continue.
+
+   /* Copy necessary bits of 'info' that were filled in */
+   *client_ip  = info->init_ip;
+}
+
+
+/*====================================================================*/
+/*=== Setting up the client's environment                          ===*/
+/*====================================================================*/
+
+/* Prepare the client's environment.  This is basically a copy of our
+   environment, except:
+
+     DYLD_INSERT_LIBRARIES=$VALGRIND_LIB/vgpreload_core-PLATFORM.so:
+                ($VALGRIND_LIB/vgpreload_TOOL-PLATFORM.so:)?
+                DYLD_INSERT_LIBRARIES
+
+   If this is missing, then it is added.
+
+   Also, remove any binding for VALGRIND_LAUNCHER=.  The client should
+   not be able to see this.
+
+   There are up to three other environment variables that we need to
+   add or modify.
+
+   PTHREAD_PTR_MUNGE_TOKEN: This is used by libc/libpthread to obfuscate
+   some saved context registers.
+   FIXME PJF - if we correctly propagate the apple parameter ptr_munge
+   would we still need this env var?
+
+   DYLD_SHARED_REGION: Darwin switched to dematerialising system libraries.
+   On some versions of Darwin this environment variable can be used
+   with a value of 'avoid' to force using the physical libraries on disk.
+   Later versions removed the physical library files so we can
+   no longer use this option with 'avoid' and we need to start processing
+   the dyld shared cache file. Darwin 20 and 21 seem to work OK
+   without needing DYLD_SHARED_REGION. Darwin 22 does need it to be
+   set explicitly to 'use' even though that is the default.
+
+   DYLD_INSERT_LIBRARIES: V uses this to preload its core and tool
+   shared libraries.
+
+   The following macOS versions have the following requirements
+   All versions: DYLD_INSERT_LIBRARIES
+   DARWIN_VERS >= DARWIN_10_15 PTHREAD_PTR_MUNGE_TOKEN
+   DARWIN_VERS < DARWIN_11_00 DYLD_SHARED_REGION=avoid
+   DARWIN_VERS >= DARWIN_11_00 DYLD_SHARED_REGION=use
+
+   Also, change VYLD_* (mangled by launcher) back to DYLD_*.
+
+   If this needs to handle any more variables it should be hacked
+   into something table driven.  The copy is VG_(malloc)'d space.
+*/
+static HChar** setup_client_env ( HChar** origenv, const HChar* toolname)
+{
+   const HChar* preload_core    = "vgpreload_core";
+   const HChar* ld_preload      = "DYLD_INSERT_LIBRARIES=";
+   const HChar* dyld_cache      = "DYLD_SHARED_REGION=";
+#if DARWIN_VERS < DARWIN_11_00
+   const HChar* dyld_cache_value= "avoid";
+#else
+   const HChar* dyld_cache_value= "use";
+#endif
+   Int    dyld_cache_len  = VG_(strlen)( dyld_cache );
+   Bool   dyld_cache_done = False;
+#if DARWIN_VERS >= DARWIN_10_15
+   Bool   pthread_ptr_munge_token_present = False;
+#endif
+   const HChar* v_launcher      = VALGRIND_LAUNCHER "=";
+   Int    extra_env_vars;
+   Int    ld_preload_len  = VG_(strlen)( ld_preload );
+   Int    v_launcher_len  = VG_(strlen)( v_launcher );
+   Bool   ld_preload_done = False;
+   Int    vglib_len       = VG_(strlen)(VG_(libdir));
+
+   HChar** cpp;
+   HChar** ret;
+   HChar*  preload_tool_path;
+   Int     envc, i;
+
+   // number of env vars to add if not already present
+#if DARWIN_VERS < DARWIN_10_15
+   extra_env_vars = 2; // DYLD_INSERT_LIBRARIES and DYLD_SHARED_REGION
+#else
+   extra_env_vars = 3; // DYLD_INSERT_LIBRARIES, DYLD_SHARED_REGION and PTHREAD_PTR_MUNGE_TOKEN
+#endif
+
+   /* Alloc space for the vgpreload_core.so path and vgpreload_<tool>.so
+      paths.  We might not need the space for vgpreload_<tool>.so, but it
+      doesn't hurt to over-allocate briefly.  The 16s are just cautious
+      slop. */
+   Int preload_core_path_len = vglib_len + VG_(strlen)(preload_core)
+                                         + sizeof(VG_PLATFORM) + 16;
+   Int preload_tool_path_len = vglib_len + VG_(strlen)(toolname) 
+                                         + sizeof(VG_PLATFORM) + 16;
+   Int preload_string_len    = preload_core_path_len + preload_tool_path_len;
+   HChar* preload_string     = VG_(malloc)("initimg-darwin.sce.1", preload_string_len);
+
+   /* Determine if there's a vgpreload_<tool>_<platform>.so file, and setup
+      preload_string. */
+   preload_tool_path = VG_(malloc)("initimg-darwin.sce.2", preload_tool_path_len);
+   VG_(snprintf)(preload_tool_path, preload_tool_path_len,
+                 "%s/vgpreload_%s-%s.so", VG_(libdir), toolname, VG_PLATFORM);
+   if (VG_(access)(preload_tool_path, True/*r*/, False/*w*/, False/*x*/) == 0) {
+      VG_(snprintf)(preload_string, preload_string_len, "%s/%s-%s.so:%s", 
+                    VG_(libdir), preload_core, VG_PLATFORM, preload_tool_path);
+   } else {
+      VG_(snprintf)(preload_string, preload_string_len, "%s/%s-%s.so", 
+                    VG_(libdir), preload_core, VG_PLATFORM);
+   }
+   VG_(free)(preload_tool_path);
+
+   VG_(debugLog)(2, "initimg", "preload_string:\n");
+   VG_(debugLog)(2, "initimg", "  \"%s\"\n", preload_string);
+
+   /* Count the original size of the env */
+   envc = 0;
+   for (cpp = origenv; cpp && *cpp; cpp++) {
+      if (VG_(memcmp)(*cpp, ld_preload, ld_preload_len) == 0) {
+         --extra_env_vars;
+      }
+      if (VG_(memcmp)(*cpp, dyld_cache, dyld_cache_len) == 0) {
+         --extra_env_vars;
+      }
+#if DARWIN_VERS >= DARWIN_10_15
+      // strictly would should check for presence and that it is not set to zero
+      if (VG_(memcmp)(*cpp, "PTHREAD_PTR_MUNGE_TOKEN=", VG_(strlen)("PTHREAD_PTR_MUNGE_TOKEN=")) == 0) {
+         --extra_env_vars;
+         pthread_ptr_munge_token_present = True;
+      }
+#endif
+      envc++;
+   }
+
+   vg_assert(extra_env_vars >= 0);
+
+   /* Allocate a new space */
+   ret = VG_(malloc) ("initimg-darwin.sce.3", 
+                      sizeof(HChar *) * (envc+extra_env_vars+1)); /* 1 to 3 new entries + NULL */
+
+   /* copy it over */
+   for (cpp = ret; *origenv; )
+      *cpp++ = *origenv++;
+   *cpp = NULL;
+   
+   vg_assert(envc == (cpp - ret));
+
+   /* Walk over the new environment, mashing as we go */
+   for (cpp = ret; cpp && *cpp; cpp++) {
+      if (VG_(memcmp)(*cpp, ld_preload, ld_preload_len) == 0) {
+         Int len = VG_(strlen)(*cpp) + preload_string_len;
+         HChar *cp = VG_(malloc)("initimg-darwin.sce.4", len);
+
+         VG_(snprintf)(cp, len, "%s%s:%s",
+                       ld_preload, preload_string, (*cpp)+ld_preload_len);
+
+         *cpp = cp;
+
+         ld_preload_done = True;
+      }
+      if (VG_(memcmp)(*cpp, dyld_cache, dyld_cache_len) == 0) {
+         Int len = dyld_cache_len + VG_(strlen)(dyld_cache_value) + 1;
+         HChar *cp = VG_(malloc)("initimg-darwin.sce.4.2", len);
+
+         VG_(snprintf)(cp, len, "%s%s", dyld_cache, dyld_cache_value);
+
+         *cpp = cp;
+
+         dyld_cache_done = True;
+      }
+   }
+
+   /* Add the missing bits */
+   if (!ld_preload_done) {
+      Int len = ld_preload_len + preload_string_len;
+      HChar *cp = VG_(malloc) ("initimg-darwin.sce.5", len);
+
+      VG_(snprintf)(cp, len, "%s%s", ld_preload, preload_string);
+
+      ret[envc++] = cp;
+   }
+   if (!dyld_cache_done) {
+      Int len = dyld_cache_len + VG_(strlen)(dyld_cache_value) + 1;
+      HChar *cp = VG_(malloc) ("initimg-darwin.sce.5.2", len);
+
+      VG_(snprintf)(cp, len, "%s%s", dyld_cache, dyld_cache_value);
+
+      ret[envc++] = cp;
+   }
+#if DARWIN_VERS >= DARWIN_10_15
+   // pthread really wants a non-zero value for ptr_munge
+   if (!pthread_ptr_munge_token_present) {
+      ret[envc++] = VG_(strdup)("initimg-darwin.sce.6", "PTHREAD_PTR_MUNGE_TOKEN=0x00000001");
+   }
+#endif
+
+   /* ret[0 .. envc-1] is live now. */
+   /* Find and remove a binding for VALGRIND_LAUNCHER. */
+   for (i = 0; i < envc; i++)
+      if (0 == VG_(memcmp)(ret[i], v_launcher, v_launcher_len))
+         break;
+
+   if (i < envc) {
+      for (; i < envc-1; i++)
+         ret[i] = ret[i+1];
+      envc--;
+   }
+
+   /* Change VYLD_ to DYLD */
+   for (i = 0; i < envc; i++) {
+      if (0 == VG_(strncmp)(ret[i], "VYLD_", 5)) {
+         ret[i][0] = 'D';
+      }
+   }
+
+   VG_(free)(preload_string);
+   ret[envc] = NULL;
+   return ret;
+}
+
+
+/*====================================================================*/
+/*=== Setting up the client's stack                                ===*/
+/*====================================================================*/
+
+/* Add a string onto the string table, and return its address */
+static HChar *copy_str(HChar **tab, const HChar *str)
+{
+   HChar *cp = *tab;
+   HChar *orig = cp;
+
+   while(*str)
+      *cp++ = *str++;
+   *cp++ = '\0';
+
+   if (0)
+      VG_(printf)("copied %p \"%s\" len %lld\n", orig, orig, (Long)(cp-orig));
+
+   *tab = cp;
+
+   return orig;
+}
+
+/* ----------------------------------------------------------------
+ 
+   This sets up the client's initial stack, containing the args,
+   environment and aux vector.
+
+   The format of the stack on Darwin is:
+
+   higher address +-----------------+ <- clstack_end
+                  |                 |
+                  : string table    :
+                  |                 |
+                  +-----------------+
+                  | NULL            |
+                  +-----------------+
+                  | executable_path | (first arg to execve())
+                  +-----------------+
+                  | NULL            |
+                  -                 -
+                  | envp            |
+                  +-----------------+
+                  | NULL            |
+                  -                 -
+                  | argv            |
+                  +-----------------+
+                  | argc            |
+                  +-----------------+
+                  | mach_header *   | (dynamic only)
+   lower address  +-----------------+ <- sp
+                  | undefined       |
+                  :                 :
+
+   Allocate and create the initial client stack.  It is allocated down
+   from clstack_end, which was previously determined by the address
+   space manager.  The returned value is the SP value for the client.
+
+   ---------------------------------------------------------------- */
+
+static 
+Addr setup_client_stack( void*  init_sp,
+                         HChar** envp,
+                         const ExeInfo* info,
+                         Addr   clstack_end,
+                         SizeT  clstack_max_size,
+                         const VexArchInfo* vex_archinfo )
+{
+   HChar **cpp;
+   HChar *strtab;		/* string table */
+   HChar *stringbase;
+   Addr *ptr;
+   unsigned stringsize;		/* total size of strings in bytes */
+   unsigned auxsize;		/* total size of auxv in bytes */
+   Int argc;			/* total argc */
+   Int envc;			/* total number of env vars */
+   unsigned stacksize;		/* total client stack size */
+   Addr client_SP;	        /* client stack base (initial SP) */
+   Addr clstack_start;
+   Int i;
+
+   vg_assert(VG_IS_PAGE_ALIGNED(clstack_end+1));
+   vg_assert( VG_(args_for_client) );
+
+   /* ==================== compute sizes ==================== */
+
+   /* first of all, work out how big the client stack will be */
+   stringsize   = 0;
+   auxsize = 0;
+
+   /* paste on the extra args if the loader needs them (ie, the #! 
+      interpreter and its argument) */
+   argc = 0;
+   if (info->interp_name != NULL) {
+      argc++;
+      stringsize += VG_(strlen)(info->interp_name) + 1;
+   }
+   if (info->interp_args != NULL) {
+      argc++;
+      stringsize += VG_(strlen)(info->interp_args) + 1;
+   }
+
+   vg_assert( VG_(args_the_exename) );
+   vg_assert( VG_(strlen)( VG_(args_the_exename) ) >= 1 );
+
+   /* now scan the args we're given... */
+   stringsize += VG_(strlen)( VG_(args_the_exename) ) + 1;
+
+   for (i = 0; i < VG_(sizeXA)( VG_(args_for_client) ); i++) {
+      argc++;
+      stringsize += VG_(strlen)( * (HChar**) 
+                                   VG_(indexXA)( VG_(args_for_client), i ))
+                    + 1;
+   }
+
+   /* ...and the environment */
+   envc = 0;
+   for (cpp = envp; cpp && *cpp; cpp++) {
+      envc++;
+      stringsize += VG_(strlen)(*cpp) + 1;
+   }
+
+   /* NULL separator and executable path */
+   auxsize += 2 * sizeof(HChar **);
+   if (info->executable_path) {
+       stringsize += 1 + VG_(strlen)(info->executable_path);
+#if SDK_VERS >= SDK_10_14_6
+       stringsize += 16; // executable_path=
+#endif
+   }
+
+#if defined(VGA_arm64)
+   // This is required so that dyld can load our dylib specified in DYLD_INSERT_LIBRARIES
+#define EXTRA_APPLE_ARG "arm64e_abi=all"
+   stringsize += VG_(strlen)(EXTRA_APPLE_ARG) + 1;
+   auxsize += sizeof(Word);
+#endif
+
+   /* Darwin mach_header */
+   if (info->dynamic)
+       auxsize += sizeof(Word);
+
+   /* OK, now we know how big the client stack is */
+   stacksize =
+      sizeof(Word) +                          /* argc */
+      sizeof(HChar **) +                      /* argv[0] == exename */
+      sizeof(HChar **)*argc +                 /* argv guest args */
+      sizeof(HChar **) +                      /* terminal NULL */
+      sizeof(HChar **)*envc +                 /* envp */
+      sizeof(HChar **) +                      /* terminal NULL */
+      auxsize +                               /* auxv */
+      VG_ROUNDUP(stringsize, sizeof(Word));   /* strings (Word aligned) */
+
+   /* The stacksize will be rounded to 16. Any rounding could come from a combination of
+      rounding up stringsize to a multiple of sizeof(Word) plus rounding of the whole
+      from a multiple of sizeof(Word) to a multiple of 16. Need to keep both of these
+      in order to calculate stringbase. */
+   size_t pointer_slop = VG_ROUNDUP(stacksize, 16) - stacksize;
+   stacksize = VG_ROUNDUP(stacksize, 16);
+
+   if (0) VG_(printf)("stacksize = %u\n", stacksize);
+
+   /* client_SP is the client's stack pointer */
+   vg_assert(stacksize % 16 == 0);
+   vg_assert((clstack_end + 1) % 16 == 0);
+   client_SP = clstack_end + 1 - stacksize;
+   vg_assert(client_SP % 16 == 0);
+
+   /* base of the string table (aligned) */
+   stringbase = strtab = (HChar *)clstack_end + 1 - VG_ROUNDUP(stringsize, sizeof(Word)) - pointer_slop;
+   vg_assert((Addr)stringbase % sizeof(Word) == 0);
+
+   /* The max stack size */
+   clstack_max_size = VG_PGROUNDUP(clstack_max_size);
+
+   /* Darwin stack is chosen by the ume loader */
+   clstack_start = clstack_end + 1 - clstack_max_size;
+
+   /* Record stack extent -- needed for stack-change code. */
+   /* GrP fixme really? */
+   VG_(clstk_start_base) = clstack_start;
+   VG_(clstk_end)  = clstack_end;
+
+   if (0)
+      VG_(printf)("stringsize=%u auxsize=%u stacksize=%u maxsize=0x%x\n"
+                  "clstack_start %p\n"
+                  "clstack_end   %p\n",
+	          stringsize, auxsize, stacksize, (UInt)clstack_max_size,
+                  (void*)clstack_start, (void*)clstack_end);
+
+   /* ==================== allocate space ==================== */
+
+   /* Stack was allocated by the ume loader. */
+
+   /* ==================== create client stack ==================== */
+
+   ptr = (Addr*)client_SP;
+
+   /* --- mach_header --- */
+   if (info->dynamic)
+      *ptr++ = info->text;
+
+   /* --- client argc --- */
+   *ptr++ = (Addr)(argc + 1);
+
+   /* --- client argv --- */
+   if (info->interp_name)
+      *ptr++ = (Addr)copy_str(&strtab, info->interp_name);
+   if (info->interp_args)
+      *ptr++ = (Addr)copy_str(&strtab, info->interp_args);
+
+   *ptr++ = (Addr)copy_str(&strtab, VG_(args_the_exename));
+
+   for (i = 0; i < VG_(sizeXA)( VG_(args_for_client) ); i++) {
+      *ptr++ = (Addr)copy_str(
+                       &strtab, 
+                       * (HChar**) VG_(indexXA)( VG_(args_for_client), i )
+                     );
+   }
+   *ptr++ = 0;
+
+   /* --- envp --- */
+   VG_(client_envp) = (HChar **)ptr;
+   for (cpp = envp; cpp && *cpp; ptr++, cpp++)
+      *ptr = (Addr)copy_str(&strtab, *cpp);
+   *ptr++ = 0;
+
+   /* --- executable_path --- */
+   vg_assert(info->executable_path);
+#if SDK_VERS >= SDK_10_14_6
+   Int executable_path_len = VG_(strlen)(info->executable_path) + 16 + 1;
+   HChar *executable_path = VG_(malloc)("initimg-darwin.scs.1", executable_path_len);
+   VG_(snprintf)(executable_path, executable_path_len, "executable_path=%s", info->executable_path);
+   *ptr++ = (Addr)copy_str(&strtab, executable_path);
+   VG_(free)(executable_path);
+#else
+   *ptr++ = (Addr)copy_str(&strtab, info->executable_path);
+#endif
+
+#if defined(VGA_arm64)
+   *ptr++ = (Addr)copy_str(&strtab, EXTRA_APPLE_ARG);
+#endif
+
+   *ptr++ = 0;
+
+   vg_assert((strtab-stringbase) == stringsize);
+
+#if (DEBUG_ENV_APPLE)
+   VG_(printf)("initimg-darwin: ptr %p stringbase %p\n", ptr, stringbase);
+#endif
+   vg_assert((HChar*)ptr == stringbase);
+
+   if (VG_(resolved_exename) == NULL) {
+      const HChar *exe_name = VG_(find_executable)(VG_(args_the_exename));
+      HChar interp_name[VKI_PATH_MAX];
+      if (VG_(try_get_interp)(exe_name, interp_name, VKI_PATH_MAX)) {
+         exe_name = interp_name;
+      }
+      HChar resolved_name[VKI_PATH_MAX];
+      if (VG_(realpath)(exe_name, resolved_name)) {
+         VG_(resolved_exename) = VG_(strdup)("initimg-darwin.scs.2", resolved_name);
+      } else {
+         /* This should not really happen. realpath tried and failed.
+            So lets just continue with the exe_name as is. */
+         VG_(resolved_exename) = VG_(strdup)("initimg-darwin.scs.3", exe_name);
+      }
+   }
+
+#if (DEBUG_ENV_APPLE)
+   print_env_apple(VG_(client_envp), "final envp");
+#endif
+
+   /* client_SP is pointing at client's argc/argv */
+
+   if (0) VG_(printf)("startup SP = %#lx\n", client_SP);
+   return client_SP;
+}
+
+
+/*====================================================================*/
+/*=== Record system memory regions                                 ===*/
+/*====================================================================*/
+
+void VG_(mach_record_system_memory)(void) {
+    /* Darwin only: tell the tools where the client's kernel commpage
+      is.  It would be better to do this by telling aspacemgr about
+      it -- see the now disused record_system_memory() below --
+      but that causes the sync checker to fail,
+      since the mapping doesn't appear in the kernel-supplied
+      process map.  So do it here instead. */
+
+#if defined(VGA_amd64)
+  VG_TRACK( new_mem_startup,
+            0x7fffffe00000, 0x7ffffffff000-0x7fffffe00000,
+            True, False, True, /* r-x */
+            0 /* di_handle: no associated debug info */ );
+#elif defined(VGA_x86)
+  VG_TRACK( new_mem_startup,
+            0xfffec000, 0xfffff000-0xfffec000,
+            True, False, True, /* r-x */
+            0 /* di_handle: no associated debug info */ );
+#elif defined(VGA_arm64)
+  VG_TRACK( new_mem_startup,
+            0xfffff4000, 0x1000,
+            True, False, True, /* r-- */
+            0 /* di_handle: no associated debug info */ );
+  VG_TRACK( new_mem_startup,
+            0xfffffc000, 0x1000,
+            True, False, True, /* r-x */
+            0 /* di_handle: no associated debug info */ );
+#else
+# error "Unknown Darwin architecture"
+#endif
+}
+
+static void record_system_memory(void)
+{
+  /* JRS 2014-Jul-08: this messes up the sync checker, because the
+     information that the kernel gives us doesn't include anything
+     about the commpage mapping.  This functionality has therefore
+     been moved to m_main.c, valgrind_main(), section "Tell the tool
+     about the initial client memory permissions".  See comments there
+     for rationale. */
+   return;
+   /*NOTREACHED*/
+
+   /* Tell aspacem where the client's kernel commpage is */
+#if defined(VGA_amd64)
+   /* commpage 0x7fff:ffe00000+ - not in vm_region */
+   // GrP fixme check again
+   VG_(am_notify_client_mmap)(0x7fffffe00000, 0x7ffffffff000-0x7fffffe00000,
+                              VKI_PROT_READ|VKI_PROT_EXEC, 0, -1, 0);
+
+#elif defined(VGA_x86)
+   /* commpage 0xfffec000+ - not in vm_region */
+   // GrP fixme check again
+   VG_(am_notify_client_mmap)(0xfffec000, 0xfffff000-0xfffec000,
+                              VKI_PROT_READ|VKI_PROT_EXEC, 0, -1, 0);
+
+#else
+#  error unknown architecture
+#endif  
+}
+
+
+/*====================================================================*/
+/*=== TOP-LEVEL: VG_(ii_create_image)                              ===*/
+/*====================================================================*/
+
+/* Create the client's initial memory image. */
+IIFinaliseImageInfo VG_(ii_create_image)( IICreateImageInfo iicii,
+                                          const VexArchInfo* vex_archinfo )
+{
+   ExeInfo info;
+   VG_(memset)( &info, 0, sizeof(info) );
+
+   HChar** env = NULL;
+
+   IIFinaliseImageInfo iifii;
+   VG_(memset)( &iifii, 0, sizeof(iifii) );
+
+   //--------------------------------------------------------------
+   // Load client executable, finding in $PATH if necessary
+   //   p: get_helprequest_and_toolname()  [for 'exec', 'need_help']
+   //   p: layout_remaining_space          [so there's space]
+   //--------------------------------------------------------------
+   VG_(debugLog)(1, "initimg", "Loading client\n");
+
+   if (VG_(args_the_exename) == NULL)
+      VG_(err_missing_prog)();
+
+   load_client(&info, &iifii.initial_client_IP);
+
+#if (DEBUG_ENV_APPLE)
+   print_env_apple(iicii.envp, "original envp");
+#endif
+
+   //--------------------------------------------------------------
+   // Set up client's environment
+   //   p: set-libdir                   [for VG_(libdir)]
+   //   p: get_helprequest_and_toolname [for toolname]
+   //--------------------------------------------------------------
+   VG_(debugLog)(1, "initimg", "Setup client env\n");
+   env = setup_client_env(iicii.envp, iicii.toolname);
+
+   //--------------------------------------------------------------
+   // Setup client stack, eip, and VG_(client_arg[cv])
+   //   p: load_client()     [for 'info']
+   //   p: fix_environment() [for 'env']
+   //--------------------------------------------------------------
+   iicii.clstack_end = info.stack_end;
+   iifii.clstack_max_size = info.stack_end - info.stack_start + 1;
+   
+   iifii.initial_client_SP = 
+       setup_client_stack( iicii.argv - 1, env, &info, 
+                           iicii.clstack_end, iifii.clstack_max_size,
+                           vex_archinfo );
+
+   VG_(free)(env);
+
+   VG_(debugLog)(2, "initimg",
+                 "Client info: "
+                 "initial_IP=%p initial_SP=%p stack=[%p..%p]\n", 
+                 (void*)(iifii.initial_client_IP),
+                 (void*)(iifii.initial_client_SP),
+                 (void*)(info.stack_start), 
+                 (void*)(info.stack_end));
+
+
+   // Tell aspacem about commpage, etc
+   record_system_memory();
+
+   VG_(free)(info.interp_name); info.interp_name = NULL;
+   VG_(free)(info.interp_args); info.interp_args = NULL;
+   return iifii;
+}
+
+
+/*====================================================================*/
+/*=== TOP-LEVEL: VG_(ii_finalise_image)                            ===*/
+/*====================================================================*/
+
+/* Just before starting the client, we may need to make final
+   adjustments to its initial image.  Also we need to set up the VEX
+   guest state for thread 1 (the root thread) and copy in essential
+   starting values.  This is handed the IIFinaliseImageInfo created by
+   VG_(ii_create_image).
+*/
+void VG_(ii_finalise_image)( IIFinaliseImageInfo iifii )
+{
+   ThreadArchState* arch = &VG_(threads)[1].arch;
+
+   /* GrP fixme doesn't handle all registers from LC_THREAD or LC_UNIXTHREAD */
+
+#  if defined(VGP_x86_darwin)
+   vg_assert(0 == sizeof(VexGuestX86State) % 16);
+
+   /* Zero out the initial state, and set up the simulated FPU in a
+      sane way. */
+   LibVEX_GuestX86_initialise(&arch->vex);
+
+   /* Zero out the shadow areas. */
+   VG_(memset)(&arch->vex_shadow1, 0, sizeof(VexGuestX86State));
+   VG_(memset)(&arch->vex_shadow2, 0, sizeof(VexGuestX86State));
+
+   /* Put essential stuff into the new state. */
+   arch->vex.guest_ESP = iifii.initial_client_SP;
+   arch->vex.guest_EIP = iifii.initial_client_IP;
+
+#  elif defined(VGP_amd64_darwin)
+   vg_assert(0 == sizeof(VexGuestAMD64State) % 16);
+
+   /* Zero out the initial state, and set up the simulated FPU in a
+      sane way. */
+   LibVEX_GuestAMD64_initialise(&arch->vex);
+
+   /* Zero out the shadow areas. */
+   VG_(memset)(&arch->vex_shadow1, 0, sizeof(VexGuestAMD64State));
+   VG_(memset)(&arch->vex_shadow2, 0, sizeof(VexGuestAMD64State));
+
+   /* Put essential stuff into the new state. */
+   arch->vex.guest_RSP = iifii.initial_client_SP;
+   arch->vex.guest_RIP = iifii.initial_client_IP;
+
+#  else
+#    error Unknown platform
+#  endif
+
+   /* Tell the tool that we just wrote to the registers. */
+   VG_TRACK( post_reg_write, Vg_CoreStartup, /*tid*/1, /*offset*/0,
+             sizeof(VexGuestArchState));
+}
+
+#endif // defined(VGO_darwin)
+
+/*--------------------------------------------------------------------*/
+/*--- end                                                          ---*/
+/*--------------------------------------------------------------------*/
+

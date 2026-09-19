@@ -1,0 +1,78 @@
+
+include $(top_srcdir)/Makefile.tool-tests.am
+
+dist_noinst_SCRIPTS = filter_stderr test.sh filter_452274 filter_auxv \
+                      filter_pre_auxv filter_fdleak auxv_script
+
+EXTRA_DIST = \
+	auxv.vgtest \
+	auxv_script.vgtest \
+	bug452274.vgtest \
+	bug498317.vgtest \
+	bug498317.supp \
+	bug499212.vgtest \
+	bug499212.stdout.exp \
+	cp.vgtest \
+	osrel.vgtest \
+	osrel.stdout.exp \
+	fexecve_hw1.vgtest \
+	fexecve_hw1.stdout.exp \
+	fexecve_hw2.vgtest \
+	fexecve_hw2.stdout.exp \
+	fexecve_script1.vgtest \
+	fexecve_script1.stderr.exp \
+	fexecve_script2.vgtest \
+	fexecve_script2.stdout.exp \
+	fexecve_txt.vgtest \
+	fexecve_txt.stderr.exp \
+	proc_pid_file.vgtest \
+	bash_test.vgtest \
+	bash_test.sh \
+	bash_test.stdout.exp \
+	csh_test.vgtest \
+	csh_test.csh \
+	csh_test.stdout.exp \
+	ksh_test.vgtest \
+	ksh_test.ksh \
+	ksh_test.stdout.exp \
+	open_client.vgtest \
+	procfs-cmdline-exe.vgtest \
+	procfs-cmdline-exe.stderr.exp \
+	readlinkat.vgtest \
+	readlinkat2.vgtest \
+	sanity_level_thread.vgtest \
+	swapcontext.vgtest \
+	swapcontext.stdout.exp \
+	umtx_op_timeout.vgtest \
+	umtx_op_timeout.stderr.exp \
+	umtx_shm_creat1.vgtest \
+	umtx_shm_creat1.stderr.exp \
+	umtx_shm_creat2.vgtest \
+	umtx_shm_creat2.stderr.exp \
+	usrstack.vgtest \
+	usrstack.stdout.exp
+
+check_PROGRAMS = \
+	auxv bug452274 bug498317 bug499212 fexecve hello_world open_client \
+	osrel proc_pid_file procfs-cmdline-exe readlinkat readlinkat2 sanity_level_thread swapcontext \
+	umtx_shm_creat usrstack
+
+AM_CFLAGS   += $(AM_FLAG_M3264_PRI)
+AM_CXXFLAGS += $(AM_FLAG_M3264_PRI)
+
+auxv_CFLAGS = ${AM_CFLAGS}
+osrel_CFLAGS = ${AM_CFLAGS}
+swapcontext_CFLAGS = ${AM_CFLAGS}
+
+hello_world_SOURCES = hello_world.cpp
+open_client_SOURCES = open_client.cpp
+proc_pid_file_SOURCES = proc_pid_file.cpp
+readlinkat_SOURCES = readlinkat.cpp
+readlinkat_CXXFLAGS = ${AM_CXXFLAGS} @FLAG_W_NO_UNINITIALIZED@
+readlinkat2_SOURCES = readlinkat2.cpp
+readlinkat2_CXXFLAGS = ${AM_CXXFLAGS} @FLAG_W_NO_UNINITIALIZED@
+
+sanity_level_thread_SOURCES = sanity_level_thread.cpp
+sanity_level_thread_LDFLAGS = ${AM_LDFLAGS} -pthread
+
+umtx_shm_creat_SOURCES = umtx_shm_creat.cpp
