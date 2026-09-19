@@ -1,4 +1,4 @@
-FROM golang:1.23.0-alpine3.19
+FROM golang:1.23.0-alpine3.19 AS builder
 
 WORKDIR /app
 
@@ -9,11 +9,18 @@ COPY config.toml .
 
 # Downloading Go modules and building it
 RUN go mod download
-RUN go build -o /server main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o /server main.go
 
 # RUN apk update
 # RUN apk upgrade
 # RUN apk add --no-cache podman
+
+FROM golang:1.23.0-alpine3.19
+
+COPY --from=builder /server /server
+COPY --from=builder /app/config.toml /app/config.toml
+
+# RUN apk add --no-cache ca-certificates
 
 EXPOSE 80
 
